@@ -21,12 +21,12 @@
     "bonjour-service": "^1.4.4",
     "fastify": "^5.12.5",
     "obs-websocket-js": "^5.0.8",
-    "puppeteer": "^25.12.0",
     "qrcode": "^1.5.4",
     "selfsigned": "^5.5.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "puppeteer": "^25.12.0",
     "vitest": "^5.0.3"
   }
 }

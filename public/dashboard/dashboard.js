@@ -6,11 +6,19 @@ const grid = document.getElementById('cam-grid');
 const btnAdd = document.getElementById('btn-add');
 const qrContainer = document.getElementById('qr-container');
 
+function updateObsStatus(connected) {
+  const statusEl = document.getElementById('obs-status');
+  if (statusEl) {
+    statusEl.innerHTML = connected ? ' - <span style="color:#0f0;">OBS Terhubung</span>' : ' - <span style="color:#f00;">OBS Tidak Terhubung (Buka OBS dan aktifkan WebSocket Server di Tools > WebSocket Server Settings)</span>';
+  }
+}
+
 async function loadSettings() {
   const res = await fetch('/api/settings');
   const data = await res.json();
   document.getElementById('obs-url').value = data.obsWsUrl || '';
   document.getElementById('obs-pwd').value = data.obsWsPassword || '';
+  updateObsStatus(data.obsConnected);
 }
 
 document.getElementById('btn-save-settings').onclick = async () => {
@@ -43,7 +51,9 @@ function connect() {
   
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'cam_join' || msg.type === 'cam_leave') {
+    if (msg.type === 'obs_status') {
+      updateObsStatus(msg.payload.connected);
+    } else if (msg.type === 'cam_join' || msg.type === 'cam_leave') {
       loadCameras();
     } else if (msg.type === 'telemetry') {
       // Update telemetry on card
@@ -99,7 +109,7 @@ async function loadCameras() {
     const tallyColor = cam.tally === 1 ? '#000' : '#fff';
     const tallyText = cam.tally === 2 ? 'PROGRAM' : cam.tally === 1 ? 'PREVIEW' : 'OFF';
     div.innerHTML = `
-      <h3>${cam.name}</h3>
+      <h3></h3>
       <p>● Terhubung <span id="tally-${cam.id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: ${tallyBg}; color: ${tallyColor};">${tallyText}</span></p>
       <div id="telemetry-${cam.id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">
         Menunggu data...
@@ -109,6 +119,7 @@ async function loadCameras() {
       <button class="btn-add-obs" data-id="${cam.id}" style="background: #28a745; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
       <div style="font-size: 0.8em; color: #666;">ID: ${cam.id}</div>
     `;
+    div.querySelector('h3').textContent = cam.name;
     grid.insertBefore(div, grid.firstChild);
   });
   
@@ -140,7 +151,7 @@ btnAdd.onclick = async () => {
   try {
     const res = await fetch('/api/token');
     const data = await res.json();
-    qrContainer.innerHTML = `<img src="${data.qr}" alt="QR Code">`;
+    qrContainer.innerHTML = `<img src="${data.qr}" alt="QR Code"><br><a href="${data.url}" target="_blank" style="color: #4da6ff; word-break: break-all;">${data.url}</a>`;
   } catch (err) {
     alert('Gagal membuat QR');
   }

@@ -7,6 +7,7 @@ export class ObsBridge {
     this.signaling = signaling;
     this.obs = new OBSWebSocket();
     this.connected = false;
+
     
     // map of camId -> tally state (0: off, 1: preview, 2: program)
     this.tallyState = new Map();
@@ -15,11 +16,13 @@ export class ObsBridge {
     this.obs.on('Identified', () => {
       console.log('🔗 Connected and Identified to OBS WebSocket');
       this.connected = true;
+      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: true }));
     });
     
     this.obs.on('ConnectionClosed', () => {
       console.log('🔌 Disconnected from OBS WebSocket');
       this.connected = false;
+      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
       this.reconnect();
     });
 
@@ -70,20 +73,31 @@ export class ObsBridge {
     await this.refreshInputs();
   }
 
-  reconnect() {
+  reconnectWithDelay(delay) {
     this.disconnect();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => this.connect(), 2000);
+    this.reconnectTimer = setTimeout(() => this.connect(), delay);
+  }
+
+  reconnect() {
+    this.reconnectAttempt = 0;
+    this.reconnectWithDelay(2000);
   }
 
   async connect() {
     try {
       await this.obs.connect(this.config.obsWsUrl, this.config.obsWsPassword);
+      this.reconnectAttempt = 0;
       await this.updateTally();
     } catch (err) {
-      // Only log on the first failure or periodically to avoid spam
-      console.error('Failed to connect to OBS WebSocket:', err);
-      this.reconnect();
+      const delay = Math.min(30000, 2000 * Math.pow(2, this.reconnectAttempt || 0));
+      this.reconnectAttempt = (this.reconnectAttempt || 0) + 1;
+      
+      if (this.reconnectAttempt === 1) {
+        console.error(`Failed to connect to OBS WebSocket: ${err.message}. Retrying...`);
+      }
+      
+      this.reconnectWithDelay(delay);
     }
   }
 
@@ -194,17 +208,12 @@ export class ObsBridge {
     }
   }
 
-  reconnect() {
-    this.disconnect();
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => this.connect(), 2000);
-  }
-
   disconnect() {
     if (this.updateTimeout) clearTimeout(this.updateTimeout);
     if (this.connected) {
       this.obs.disconnect();
       this.connected = false;
+      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
     }
   }
 

@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
   let globalCamId = 'cam-to-replace';
 
   console.log('Starting backend server on port 3001...');
-  const server = spawn('node', ['src/server.js'], { env: { ...process.env, OMNICAM_PORT: '3001', TEST_E2E: '1' } });
+  const server = spawn('node', ['src/server.js'], { env: { ...process.env, OMNICAM_PORT: '3001', NODE_ENV: 'test' } });
   
   server.stdout.on('data', (d) => process.stdout.write(`[SERVER] ${d}`));
   server.stderr.on('data', (d) => process.stderr.write(`[SERVER ERR] ${d}`));
@@ -51,7 +51,32 @@ import { spawn } from 'node:child_process';
   
   console.log('Opening dashboard to get camId...');
   const dashboard = await browser.newPage();
+  const errors = [];
+  dashboard.on('pageerror', err => errors.push(err.message));
+  dashboard.on('requestfailed', req => {
+    if (req.failure().errorText !== 'net::ERR_ABORTED') {
+       errors.push(`Request failed: ${req.url()}`);
+    } else if (req.response() && !req.response().ok()) {
+       errors.push(`Request failed (HTTP ${req.response().status()}): ${req.url()}`);
+    }
+  });
+  dashboard.on('console', msg => {
+    if (msg.type() === 'error') errors.push(`Console error: ${msg.text()}`);
+  });
+  
+  dashboard.on('response', res => {
+    if (!res.ok() && res.status() >= 400) {
+      errors.push(`HTTP ${res.status()}: ${res.url()}`);
+    }
+  });
+
   await dashboard.goto('https://127.0.0.1:3001');
+  
+  if (errors.length > 0) {
+    console.error('Dashboard load failed with errors:', errors);
+    server.kill();
+    process.exit(1);
+  }
   
   // Wait a bit for cameras to populate
   await new Promise(r => setTimeout(r, 2000));

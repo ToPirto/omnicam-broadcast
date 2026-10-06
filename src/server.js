@@ -53,7 +53,11 @@ async function start() {
   });
   
   fastify.get('/api/settings', async (request, reply) => {
-    return { obsWsUrl: config.obsWsUrl, obsWsPassword: config.obsWsPassword };
+    return { 
+      obsWsUrl: config.obsWsUrl, 
+      obsWsPassword: config.obsWsPassword,
+      obsConnected: obsBridge.connected 
+    };
   });
 
   fastify.post('/api/settings', async (request, reply) => {
@@ -76,7 +80,7 @@ async function start() {
     }
   });
 
-  if (process.env.TEST_E2E) {
+  if (process.env.NODE_ENV === 'test') {
     fastify.post('/api/test/tally', async (request, reply) => {
       const { camId, state } = request.body;
       const { createEnvelope } = await import('./protocol.js');
