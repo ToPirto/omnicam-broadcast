@@ -76,6 +76,19 @@ async function start() {
     }
   });
 
+  if (process.env.TEST_E2E) {
+    fastify.post('/api/test/tally', async (request, reply) => {
+      const { camId, state } = request.body;
+      const { createEnvelope } = await import('./protocol.js');
+      obsBridge.tallyState.set(camId, state);
+      const msg = createEnvelope('tally', 'server', camId, { state });
+      signaling.relayTo(msg);
+      signaling.registry.updateTally(camId, state);
+      signaling.broadcastToDashboards(createEnvelope('tally', 'server', 'dashboard', { camId, state }));
+      return { success: true };
+    });
+  }
+
   try {
     await fastify.listen({ port: config.port, host: config.host });
     advertiseMDNS(config.port);

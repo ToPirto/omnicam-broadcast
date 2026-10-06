@@ -81,6 +81,7 @@ function startConnection() {
       }
     } else if (msg.type === 'tally') {
       const state = msg.payload.state;
+      console.log('Received tally state:', state);
       const border = document.getElementById('tally-border');
       border.className = '';
       if (state === 2) border.classList.add('tally-red');

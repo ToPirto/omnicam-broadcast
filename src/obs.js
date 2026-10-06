@@ -12,8 +12,8 @@ export class ObsBridge {
     this.tallyState = new Map();
     this.inputToCamId = new Map();
 
-    this.obs.on('ConnectionOpened', () => {
-      console.log('🔗 Connected to OBS WebSocket');
+    this.obs.on('Identified', () => {
+      console.log('🔗 Connected and Identified to OBS WebSocket');
       this.connected = true;
     });
     
@@ -82,7 +82,7 @@ export class ObsBridge {
       await this.updateTally();
     } catch (err) {
       // Only log on the first failure or periodically to avoid spam
-      console.error('Failed to connect to OBS WebSocket:', err.message);
+      console.error('Failed to connect to OBS WebSocket:', err);
       this.reconnect();
     }
   }
