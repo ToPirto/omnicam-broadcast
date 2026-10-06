@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "battery": { "type": "number" },
+    "isCharging": { "type": "boolean" },
+    "bitrate": { "type": "number" },
+    "fps": { "type": "number" },
+    "rtt": { "type": "number" },
+    "droppedFrames": { "type": "number" }
+  }
+}

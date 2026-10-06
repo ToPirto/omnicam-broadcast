@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "v": { "type": "integer", "const": 1 },
+    "type": { "type": "string" },
+    "id": { "type": "string" },
+    "ts": { "type": "integer" },
+    "seq": { "type": "integer" },
+    "from": { "type": "string" },
+    "to": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "required": ["v", "type", "id", "from", "to", "payload"]
+}

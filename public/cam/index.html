@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OmniCam Sender</title>
+  <link rel="stylesheet" href="sender.css">
+</head>
+<body>
+  <div id="tally-border" class="tally-grey"></div>
+  <div class="video-container">
+    <video id="preview" autoplay muted playsinline></video>
+  </div>
+  
+  <div class="hud">
+    <div id="status">● Menunggu koneksi...</div>
+    <div id="telemetry">
+      <span id="bitrate">0 kbps</span> | 
+      <span id="fps">0 fps</span> | 
+      <span id="battery">🔋 --</span>
+    </div>
+    <div class="controls">
+      <button id="btn-start">Mulai Kamera</button>
+      <select id="cam-select"></select>
+    </div>
+  </div>
+
+  <script type="module" src="sender.js"></script>
+</body>
+</html>

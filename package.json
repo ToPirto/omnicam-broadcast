@@ -1,0 +1,31 @@
+{
+  "name": "omnicam-by-too",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "start": "node src/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@fastify/formbody": "^9.0.0",
+    "@fastify/static": "^10.1.5",
+    "bonjour-service": "^1.4.4",
+    "fastify": "^5.12.5",
+    "obs-websocket-js": "^5.0.8",
+    "puppeteer": "^25.12.0",
+    "qrcode": "^1.5.4",
+    "selfsigned": "^5.5.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.3"
+  }
+}
