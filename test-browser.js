@@ -20,7 +20,8 @@ import { spawn } from 'node:child_process';
       '--use-fake-ui-for-media-stream',
       '--use-fake-device-for-media-stream',
       '--ignore-certificate-errors',
-      '--no-sandbox'
+      '--no-sandbox',
+      '--autoplay-policy=no-user-gesture-required'
     ]
   });
 
@@ -129,6 +130,63 @@ import { spawn } from 'node:child_process';
   borderClass = await page.$eval('#tally-border', el => el.className);
   console.log('After Off border class:', borderClass);
   if (!borderClass.includes('tally-grey')) throw new Error('Expected tally-grey');
+
+  console.log('Testing viewer page...');
+  const viewPage = await browser.newPage();
+  await viewPage.bringToFront();
+  viewPage.on('console', msg => console.log('[VIEWER LOG]', msg.text()));
+  await viewPage.goto(`https://127.0.0.1:3001/view/index.html?camId=${globalCamId}`);
+  await new Promise(r => setTimeout(r, 4000)); // wait for video to flow
+  
+  await viewPage.evaluate(() => {
+    const v = document.getElementById('video');
+    if (v.paused) v.play().catch(e => console.error('E2E play err:', e));
+  });
+
+  const getVideoStats = async (p) => {
+    return p.evaluate(async () => {
+      const video = document.getElementById('video');
+      let framesDecoded = 0;
+      if (window.pc) {
+        const stats = await window.pc.getStats();
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            framesDecoded = report.framesDecoded;
+          }
+        });
+      }
+      return {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        currentTime: video.currentTime,
+        framesDecoded
+      };
+    });
+  };
+
+  let initialStats;
+  for (let i = 0; i < 15; i++) {
+    initialStats = await getVideoStats(viewPage);
+    console.log(`Checking stats (attempt ${i}):`, initialStats);
+    if (initialStats.framesDecoded > 20) break;
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  
+  console.log('Viewer initial stats:', initialStats);
+  if (initialStats.framesDecoded < 20) throw new Error('Frames decoded not advancing');
+
+  console.log('Testing landscape mode...');
+  await page.bringToFront();
+  await page.setViewport({ width: 1920, height: 1080, isLandscape: true });
+  await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
+  await new Promise(r => setTimeout(r, 4000));
+  await viewPage.bringToFront();
+
+  const landscapeStats = await getVideoStats(viewPage);
+  console.log('Viewer landscape stats:', landscapeStats);
+  if (landscapeStats.framesDecoded <= initialStats.framesDecoded) {
+    throw new Error('Frames decoded not advancing');
+  }
 
   console.log('E2E Test Passed!');
   await browser.close();

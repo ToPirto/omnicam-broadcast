@@ -17,7 +17,7 @@ async function loadSettings() {
   const res = await fetch('/api/settings');
   const data = await res.json();
   document.getElementById('obs-url').value = data.obsWsUrl || '';
-  document.getElementById('obs-pwd').value = data.obsWsPassword || '';
+  document.getElementById('obs-pwd').value = data.passwordSaved ? '********' : '';
   updateObsStatus(data.obsConnected);
 }
 
@@ -135,7 +135,7 @@ async function loadCameras() {
       });
       const data = await res.json();
       if (data.success) {
-        e.target.innerText = 'Berhasil Ditambahkan';
+        e.target.innerText = data.exists ? 'Berhasil Diperbarui di OBS' : 'Berhasil Ditambahkan';
       } else {
         alert('Gagal: ' + data.error);
         e.target.innerText = '+ Tambah Otomatis ke OBS';

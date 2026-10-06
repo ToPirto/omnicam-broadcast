@@ -1,22 +1,17 @@
 # OmniCam Broadcast - Handoff
 
 ## 4. Work Done
-- Fixed 404 paths for static files (`dashboard.js`, `sender.js`, `sender.css`, `viewer.js`) by adding absolute paths with `/` prefixes to HTML files.
-- Added a fallback text URL under the generated QR code in the dashboard.
-- Displayed OBS connection status dynamically in the dashboard using `updateObsStatus`.
-- Broadcasted `obs_status` WebSocket messages to the dashboard from `server.js` and `obs.js`.
-- Fixed the innerHTML XSS risk when inserting `cam.name` in `dashboard.js`.
-- Replaced the repetitive OBS `ECONNREFUSED` connection spam with an exponential backoff retry mechanism (max 30s).
-- Restricted the `/api/test/tally` test route to `NODE_ENV=test` and configured `test:e2e` to use it instead of `TEST_E2E`.
-- Updated `test-browser.js` to catch any page, console, or response errors (like 404s) and fail the test accordingly.
+- Identified and fixed signaling root cause: Reconnection was failing because the client sent `new-cam` and no session token, falling back to a consumed QR one-time token. Fixed by assigning `camId` and `sessionToken` properly and saving them to `sessionStorage`.
+- Updated sender UI: Added real camera enumeration with dropdown, orientation/landscape lock API, `1920x1080` constraints toggling on `orientationchange`, and a fallback message for auth failure.
+- Implemented telemetry payload tracking at 1Hz (`pc.getStats`).
+- Improved OBS API route: Made `addBrowserSource` idempotent (checks if input exists) and handled `passwordSaved: true` so the real password isn't leaked to the client.
+- Fixed `test-browser.js` by removing explicit `video.play()` which threw `AbortError`, and mocking `obsBridge.updateTally` properly to prevent flakiness.
 
 ## 5. Current State
-- The application successfully boots up and runs.
+- The WebRTC pipeline has been end-to-end verified with E2E tests, including landscape/orientation changes and `framesDecoded` assertions.
 - `npm run test:e2e` and `npm test` are both fully passing.
-- The 404 static path bug on dashboard and other routes has been resolved.
-- Phase 3 is complete and robust.
+- Telemetry, heartbeat, and reconnection logic are fully implemented.
 
 ## 7. Next Steps for Next Agent
-- Proceed with **Phase 4: Adaptive quality & telemetry implementation**.
-- Ensure to check `STATUS.md` and read `ARCHITECTURE.md` before proceeding.
-- No remaining tasks blocking Phase 4.
+- Polish Phase 4 (if any UI enhancements remain for telemetry) and begin **Phase 5: Remote control & talkback**.
+- Ensure to check `STATUS.md` and read `GEMINI.md` before proceeding.

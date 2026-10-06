@@ -17,12 +17,16 @@ export class SignalingServer {
     });
 
     this.pingInterval = setInterval(() => {
+      const now = Date.now();
       this.wss.clients.forEach((ws) => {
-        if (ws.isAlive === false) return ws.terminate();
+        if (!ws.isAlive || (ws.lastPing && now - ws.lastPing > 15000)) {
+          return ws.terminate();
+        }
         ws.isAlive = false;
+        ws.lastPing = now;
         ws.ping();
       });
-    }, 30000);
+    }, 5000);
   }
   
   createPairingToken() {
@@ -47,8 +51,21 @@ export class SignalingServer {
         this.handleAuth(ws, msg);
         break;
       case 'offer':
+        const offerCam = this.registry.getCamera(msg.from);
+        if (offerCam) {
+          offerCam.lastOffer = msg;
+          offerCam.iceCandidates = [];
+        }
+        this.relayTo(msg);
+        break;
       case 'answer':
+        this.relayTo(msg);
+        break;
       case 'ice':
+        const iceCam = this.registry.getCamera(msg.from);
+        if (iceCam && iceCam.iceCandidates) {
+           iceCam.iceCandidates.push(msg);
+        }
         this.relayTo(msg);
         break;
       case 'telemetry':
@@ -62,6 +79,13 @@ export class SignalingServer {
           ws.isViewer = true;
           ws.camId = msg.payload.camId;
           this.registry.addViewer(msg.payload.camId, ws);
+          const cam = this.registry.getCamera(ws.camId);
+          if (cam && cam.lastOffer) {
+            ws.send(JSON.stringify(cam.lastOffer));
+            if (cam.iceCandidates) {
+              cam.iceCandidates.forEach(ice => ws.send(JSON.stringify(ice)));
+            }
+          }
         }
         break;
       case 'dashboard_join':

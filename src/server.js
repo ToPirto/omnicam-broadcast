@@ -55,15 +55,27 @@ async function start() {
   fastify.get('/api/settings', async (request, reply) => {
     return { 
       obsWsUrl: config.obsWsUrl, 
-      obsWsPassword: config.obsWsPassword,
+      passwordSaved: !!config.obsWsPassword,
       obsConnected: obsBridge.connected 
     };
   });
 
   fastify.post('/api/settings', async (request, reply) => {
     const { obsWsUrl, obsWsPassword } = request.body;
-    saveSettings({ obsWsUrl, obsWsPassword });
-    obsBridge.updateConfig(config);
+    let pwdToSave = obsWsPassword;
+    if (obsWsPassword === '********') {
+      pwdToSave = config.obsWsPassword;
+    }
+    saveSettings({ obsWsUrl, obsWsPassword: pwdToSave });
+    config.obsWsUrl = obsWsUrl;
+    config.obsWsPassword = pwdToSave;
+    
+    // reconnect immediately
+    obsBridge.config = config;
+    obsBridge.disconnect();
+    if (obsBridge.reconnectTimer) clearTimeout(obsBridge.reconnectTimer);
+    obsBridge.connect();
+    
     return { success: true };
   });
 
@@ -73,8 +85,8 @@ async function start() {
     const ip = ips.length > 0 ? ips[0] : '127.0.0.1';
     const url = `https://${ip}:${config.port}/view/index.html?camId=${camId}`;
     try {
-      await obsBridge.addBrowserSource(`Camera ${camId.substring(0, 4)}`, url);
-      return { success: true };
+      const exists = await obsBridge.addBrowserSource(`Camera ${camId.substring(0, 4)}`, url);
+      return { success: true, exists };
     } catch (e) {
       return { success: false, error: e.message };
     }
@@ -85,6 +97,7 @@ async function start() {
       const { camId, state } = request.body;
       const { createEnvelope } = await import('./protocol.js');
       obsBridge.tallyState.set(camId, state);
+      obsBridge.updateTally = async () => {}; // Disable real polling from overriding
       const msg = createEnvelope('tally', 'server', camId, { state });
       signaling.relayTo(msg);
       signaling.registry.updateTally(camId, state);

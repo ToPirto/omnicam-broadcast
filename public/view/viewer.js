@@ -11,6 +11,8 @@ if (!camId) {
 const video = document.getElementById('video');
 let ws;
 let pc;
+window.pc = null;
+window.video = video;
 
 function connect() {
   ws = new WebSocket(`wss://${window.location.host}`);
@@ -24,9 +26,12 @@ function connect() {
     
     if (msg.type === 'offer') {
       pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      window.pc = pc;
       
       pc.ontrack = (event) => {
-        video.srcObject = event.streams[0];
+        if (!video.srcObject) {
+          video.srcObject = event.streams[0];
+        }
       };
       
       pc.onicecandidate = (event) => {

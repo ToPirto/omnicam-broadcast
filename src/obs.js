@@ -56,21 +56,37 @@ export class ObsBridge {
     const programResp = await this.obs.call('GetCurrentProgramScene');
     const sceneName = programResp.currentProgramSceneName;
     
-    // Create the input
-    await this.obs.call('CreateInput', {
-      sceneName,
-      inputName: name,
-      inputKind: 'browser_source',
-      inputSettings: {
-        url: url,
-        width: 1920,
-        height: 1080,
-        reroute_audio: true // "Control audio via OBS"
-      },
-      sceneItemEnabled: true
-    });
+    let exists = false;
+    try {
+      const inputsResp = await this.obs.call('GetInputList', { inputKind: 'browser_source' });
+      if (inputsResp.inputs.some(i => i.inputName === name)) {
+        exists = true;
+      }
+    } catch(e) {}
+
+    if (exists) {
+      await this.obs.call('SetInputSettings', {
+        inputName: name,
+        inputSettings: { url: url }
+      });
+    } else {
+      // Create the input
+      await this.obs.call('CreateInput', {
+        sceneName,
+        inputName: name,
+        inputKind: 'browser_source',
+        inputSettings: {
+          url: url,
+          width: 1920,
+          height: 1080,
+          reroute_audio: true // "Control audio via OBS"
+        },
+        sceneItemEnabled: true
+      });
+    }
     
     await this.refreshInputs();
+    return exists;
   }
 
   reconnectWithDelay(delay) {

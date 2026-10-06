@@ -9,11 +9,13 @@
   - Verified with evidence (Puppeteer e2e Test): Mocking tally endpoint in server and asserting dynamic UI border color changes.
 
 ## 🔄 In Progress
-- Phase 4: Adaptive quality & telemetry (NOT verified)
+- Phase 4: Adaptive quality & telemetry
+  - VERIFIED: E2E test proves frames reach viewer even across landscape orientation changes.
+  - VERIFIED: Telemetry correctly tracks bitrate and frames.
 
 ## 🐛 Known Bugs
-(none yet)
+(Fixed) Reconnection failed because `new-cam` was sent instead of `camId` and one-time token was expired.
 
 ## 📋 Next Steps
-- Phase 4: Adaptive quality & telemetry implementation
+- Polish Phase 4 and move to Phase 5: Remote control & talkback
 - Phase 5: Remote control & talkback
