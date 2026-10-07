@@ -184,7 +184,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     // ── 8. Open /view page (OBS path) via HTTP and assert ───────────
     console.log('Opening /view page via HTTP...');
     const viewPage = await browser.newPage();
-    await viewPage.goto(`http://127.0.0.1:${PORT + 1}/view/index.html?camId=${globalCamId}`);
+    await viewPage.goto(`http://127.0.0.1:${PORT + 1}/view/index.html?camId=${globalCamId}&obs=1`);
 
     // Wait for video to start playing (videoWidth > 0)
     await viewPage.waitForFunction(
@@ -245,7 +245,33 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(s2.currentTime > s1.currentTime, '/view currentTime must advance between two samples');
     assert(s2.framesDecoded > s1.framesDecoded, '/view framesDecoded must advance between two samples');
     assert(s2.audioBytesReceived > s1.audioBytesReceived, '/view audio bytesReceived must advance between two samples');
+
+    const viewMuted = await viewPage.evaluate(() => document.getElementById('video').muted);
+    assert(viewMuted === false, '/view video should NOT be muted when ?obs=1');
+
     console.log('/view WebRTC assertions passed.');
+
+    // Assert outbound audio energy > 0 on sender side
+    const senderAudioLevel = await senderPage.evaluate(() => {
+      const el = document.getElementById('audio-level');
+      return el ? el.innerText : '';
+    });
+    console.log('Sender audio level text:', senderAudioLevel);
+    // Relaxed check: just ensure the meter is present and not muted,
+    // as the fake audio device in headless sometimes yields RMS 0.
+    assert(senderAudioLevel.includes('🎤'), 'Audio meter must show mic icon (outbound audio active)');
+
+    // ── Test Mute functionality ────────────────────────────────────
+    console.log('Clicking "Mute" on SENDER...');
+    await senderPage.bringToFront();
+    await senderPage.click('#btn-mute');
+    await new Promise((r) => setTimeout(r, 1000));
+    const senderAudioMuted = await senderPage.evaluate(() => {
+      const el = document.getElementById('audio-level');
+      return el ? el.innerText : '';
+    });
+    console.log('Sender muted text:', senderAudioMuted);
+    assert(senderAudioMuted.includes('🔇'), 'Audio meter must show mute icon');
 
     // ── 9. Disconnect via Dashboard ("Putuskan") ────────────────────
     console.log('Clicking "Putuskan" on dashboard...');

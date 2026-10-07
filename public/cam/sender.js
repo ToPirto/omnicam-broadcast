@@ -15,6 +15,12 @@ let reconnectAttempts = 0;
 let telemetryInterval = null;
 let intentionalDisconnect = false;
 
+let audioContext = null;
+let audioAnalyser = null;
+let audioData = null;
+let audioSource = null;
+let isMuted = false;
+
 let peers = new Map(); // viewerId -> RTCPeerConnection
 
 const statusEl = isNode ? null : document.getElementById('status');
@@ -113,6 +119,22 @@ async function startCamera(deviceId = null) {
       resolutionEl.innerText = `${s.width || 0}x${s.height || 0}`;
     }
 
+    if (typeof window !== 'undefined' && window.AudioContext) {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        audioAnalyser = audioContext.createAnalyser();
+        audioAnalyser.fftSize = 256;
+        audioData = new Uint8Array(audioAnalyser.frequencyBinCount);
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(e => console.warn('AudioContext resume failed:', e));
+      }
+      // Re-connect source if stream changes
+      if (audioSource) audioSource.disconnect();
+      audioSource = audioContext.createMediaStreamSource(localStream);
+      audioSource.connect(audioAnalyser);
+    }
+
     peers.forEach(pc => {
       const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
       if (sender && videoTrack) {
@@ -198,8 +220,6 @@ if (!isNode) {
   const chkNoise = document.getElementById('chk-noise');
   const chkAgc = document.getElementById('chk-agc');
   
-  let isMuted = false;
-
   btnMute.onclick = () => {
     isMuted = !isMuted;
     if (localStream) {
@@ -209,6 +229,8 @@ if (!isNode) {
       }
     }
     btnMute.innerText = isMuted ? 'Unmute' : 'Mute';
+    btnMute.style.background = isMuted ? '#dc3545' : '';
+    btnMute.style.color = isMuted ? 'white' : '';
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(createEnvelope('mute_state', camId, 'server', { muted: isMuted })));
     }
@@ -655,8 +677,36 @@ function startTelemetry() {
     bitrateEl.innerText = mainValid ? `${Math.round(mainBitrate / 1000)} kbps` : '- kbps';
     fpsEl.innerText = mainValid ? `${Math.round(mainFps)} fps` : '- fps';
     
+    let audioLvl = 0;
+    let rawRms = 0;
+    if (audioAnalyser) {
+      audioAnalyser.getByteTimeDomainData(audioData);
+      let sum = 0;
+      for (let i = 0; i < audioData.length; i++) {
+        const val = (audioData[i] - 128) / 128;
+        sum += val * val;
+      }
+      rawRms = Math.sqrt(sum / audioData.length);
+      audioLvl = isMuted ? 0 : Math.min(Math.round(rawRms * 10 * 100), 100);
+    }
+    
+    // Add debug log for audio
+    if (!isMuted && audioAnalyser) {
+      console.log(`Audio RMS: ${rawRms}, audioLvl: ${audioLvl}`);
+    }
+
     const audioEl = document.getElementById('audio-level');
-    if (audioEl) audioEl.innerText = `🎤 ${audioBytesTotal}`;
+    if (audioEl) {
+      const barCount = Math.round(audioLvl / 20);
+      let barStr = '';
+      for (let i = 0; i < 5; i++) {
+        if (isMuted) barStr += 'x';
+        else if (i < barCount) barStr += '█';
+        else barStr += '▒';
+      }
+      audioEl.innerText = isMuted ? `🔇 ${barStr}` : `🎤 ${barStr}`;
+      audioEl.style.color = isMuted ? '#dc3545' : '';
+    }
 
     let batteryLvl = null;
     if ('getBattery' in navigator) {
@@ -667,7 +717,9 @@ function startTelemetry() {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(createEnvelope('telemetry', camId, 'server', { 
         bitrate: mainBitrate, 
-        fps: Math.round(mainFps), 
+        fps: Math.round(mainFps),
+        audioLevel: audioLvl,
+        isMuted: isMuted,
         battery: batteryLvl 
       })));
     }

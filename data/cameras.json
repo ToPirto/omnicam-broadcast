@@ -1,26 +1,6 @@
 {
-  "cam1": {
-    "name": "Altar Cam",
-    "sessionToken": "token1"
-  },
-  "cam2": {
-    "name": "Camera ",
-    "sessionToken": "t2"
-  },
-  "cam-78f5b770": {
-    "name": "Camera 78f5",
-    "sessionToken": "d4861a8c-50a8-4912-9170-9c900fad735d"
-  },
-  "cam-5f334815": {
-    "name": "Camera 5f33",
-    "sessionToken": "f08a98e3-7b3f-42d3-877c-fe897d814aad"
-  },
-  "cam-9bd1aba4": {
-    "name": "Camera 9bd1",
-    "sessionToken": "a1ced964-7fd2-45fe-b346-efa0c955f85c"
-  },
-  "cam-b0cda4ce": {
-    "name": "Camera b0cd",
-    "sessionToken": "e9d299be-4479-48bf-9472-0082ba6b3eef"
+  "cam-597659d9": {
+    "name": "Camera 5976",
+    "sessionToken": "c7337146-d550-4bba-b298-9bd6d4d48698"
   }
 }
