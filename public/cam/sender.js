@@ -49,6 +49,21 @@ if (!isNode) {
       await requestWakeLock();
     }
   });
+
+  const diagPanel = document.getElementById('diagnostics-panel');
+  const btnToggleDiag = document.getElementById('btn-toggle-diag');
+  const btnCloseDiag = document.getElementById('btn-close-diag');
+
+  if (btnToggleDiag && diagPanel) {
+    btnToggleDiag.onclick = () => {
+      diagPanel.style.display = 'block';
+    };
+  }
+  if (btnCloseDiag && diagPanel) {
+    btnCloseDiag.onclick = () => {
+      diagPanel.style.display = 'none';
+    };
+  }
 }
 
 export function getTargetVideoSettings(val) {
@@ -456,8 +471,12 @@ function startTelemetry() {
   if (telemetryInterval) return;
   peerStats.clear();
   lastTime = 0;
-  
+  let diagCounter = 0;
   telemetryInterval = setInterval(async () => {
+    diagCounter++;
+    const doDiag = diagCounter % 2 === 0;
+    let diagText = '';
+    
     let activePeers = 0;
     
     let mainBitrate = 0;
@@ -475,14 +494,30 @@ function startTelemetry() {
         let audioBytes = 0;
         let timestamp = performance.now();
         
+        let encoder = '-', fw = 0, fh = 0, ffps = 0, tbr = 0, qlr = '-', avail = 0, rtt = 0, jitter = 0, pl = 0;
+        
         stats.forEach(report => {
           if (report.type === 'outbound-rtp' && report.kind === 'video') {
             bytesSent += report.bytesSent;
             framesEncoded += report.framesEncoded;
             if (report.timestamp) timestamp = report.timestamp;
+            encoder = report.encoderImplementation || '-';
+            fw = report.frameWidth || 0;
+            fh = report.frameHeight || 0;
+            ffps = report.framesPerSecond || 0;
+            tbr = report.targetBitrate || 0;
+            qlr = report.qualityLimitationReason || '-';
           }
           if (report.type === 'outbound-rtp' && report.kind === 'audio') {
             audioBytes += report.bytesSent;
+          }
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            avail = report.availableOutgoingBitrate || 0;
+            rtt = report.currentRoundTripTime || 0;
+          }
+          if (report.type === 'remote-inbound-rtp' && report.kind === 'video') {
+            jitter = report.jitter || 0;
+            pl = report.packetsLost || 0;
           }
         });
         
@@ -492,6 +527,16 @@ function startTelemetry() {
         const maxFps = id.startsWith('dash-') ? 15 : settings.fps;
         const result = calculatePeerTelemetry(currentStats, peerStats.get(id), maxFps);
         peerStats.set(id, result);
+
+        if (doDiag) {
+          const mkbps = Math.round(result.bitrate / 1000);
+          const akbps = Math.round(avail / 1000);
+          const tkbps = Math.round(tbr / 1000);
+          diagText += `[${id}]\n` +
+            `Enc: ${encoder} | Res: ${fw}x${fh} @ ${ffps}fps\n` +
+            `Tar: ${tkbps}kbps | Mes: ${mkbps}kbps | Avail: ${akbps}kbps\n` +
+            `QLR: ${qlr} | Jitter: ${jitter} | Loss: ${pl} | RTT: ${rtt}\n\n`;
+        }
 
         if (id.startsWith('viewer-')) {
           if (result.hasTwoSamples) {
@@ -506,6 +551,14 @@ function startTelemetry() {
         }
       } else {
         peerStats.delete(id); // reset if disconnected
+      }
+    }
+
+    if (doDiag && diagText) {
+      if (isNode === false) {
+        const diagContent = document.getElementById('diagnostics-content');
+        if (diagContent) diagContent.innerText = diagText;
+        console.log(diagText);
       }
     }
 
