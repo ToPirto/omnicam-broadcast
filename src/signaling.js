@@ -125,14 +125,18 @@ export class SignalingServer {
     if (sessionToken) {
       // Reconnection logic
       const camId = msg.from;
-      const cam = this.registry.getCamera(camId);
-      if (cam && cam.sessionToken === sessionToken) {
-        cam.ws = ws;
+      if (this.registry.verifySession(camId, sessionToken)) {
+        this.registry.register(camId, ws, sessionToken); // Put it online
         ws.camId = camId;
         ws.send(JSON.stringify(createEnvelope('auth_ok', 'server', camId, { sessionToken, camId })));
-        if (cam.tally !== undefined) {
+        
+        const cam = this.registry.getCamera(camId);
+        if (cam && cam.tally !== undefined) {
           ws.send(JSON.stringify(createEnvelope('tally', 'server', camId, { state: cam.tally })));
         }
+
+        // Notify dashboards
+        this.broadcastToDashboards(createEnvelope('cam_join', 'server', 'dashboard', { camId }));
         
         // Notify sender about all connected viewers so it can create offers
         const viewers = this.registry.getViewers(camId);
@@ -149,8 +153,8 @@ export class SignalingServer {
       // New pairing
       if (this.pendingTokens.has(token)) {
         this.pendingTokens.delete(token);
-        const camId = `cam-${randomUUID().substring(0,8)}`;
-        const newSessionToken = randomUUID();
+        const camId = (msg.from && msg.from.startsWith('cam-')) ? msg.from : `cam-${randomUUID().substring(0,8)}`;
+        const newSessionToken = sessionToken || randomUUID();
         
         try {
           this.registry.register(camId, ws, newSessionToken);

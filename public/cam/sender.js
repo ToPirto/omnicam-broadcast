@@ -6,8 +6,8 @@ const urlParams = isNode ? null : new URLSearchParams(window.location.search);
 const token = isNode ? null : urlParams.get('token');
 
 let ws;
-let camId = (isNode ? null : sessionStorage.getItem('omnicam_id')) || 'new-cam';
-let sessionToken = isNode ? null : sessionStorage.getItem('omnicam_session');
+let camId = (isNode ? null : localStorage.getItem('omnicam_id')) || 'new-cam';
+let sessionToken = isNode ? null : localStorage.getItem('omnicam_session');
 let localStream;
 let wakeLock = null;
 let currentDeviceId = null;

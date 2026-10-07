@@ -1,0 +1,10 @@
+{
+  "cam1": {
+    "name": "Altar Cam",
+    "sessionToken": "token1"
+  },
+  "cam2": {
+    "name": "Camera ",
+    "sessionToken": "t2"
+  }
+}

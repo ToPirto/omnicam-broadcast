@@ -67,6 +67,14 @@ async function start() {
     return registry.listCameras();
   });
   
+  fastify.post('/api/cameras/rename', async (request, reply) => {
+    const { camId, name } = request.body;
+    registry.rename(camId, name);
+    // Broadcast name change to all dashboards
+    signaling.broadcastToDashboards({ type: 'cam_join', from: 'server', to: 'dashboard', payload: { camId, name } });
+    return { success: true };
+  });
+  
   fastify.get('/api/settings', async (request, reply) => {
     return { 
       obsWsUrl: config.obsWsUrl, 

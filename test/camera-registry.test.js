@@ -40,4 +40,22 @@ describe('CameraRegistry', () => {
     registry.removeViewer('cam1', 'ws1');
     expect(registry.getViewers('cam1').size).toBe(1);
   });
+
+  it('supports renaming a camera and persisting session', () => {
+    registry.register('cam1', {}, 'token1');
+    registry.rename('cam1', 'Altar Cam');
+    
+    // Unregister removes from active online list
+    registry.unregister('cam1');
+    expect(registry.getCamera('cam1')).toBeUndefined();
+    
+    // But it's still in the list of all known cameras
+    const all = registry.listCameras();
+    const found = all.find(c => c.id === 'cam1');
+    expect(found.name).toBe('Altar Cam');
+    expect(found.status).toBe('offline');
+    
+    // Can verify session token
+    expect(registry.verifySession('cam1', 'token1')).toBe(true);
+  });
 });

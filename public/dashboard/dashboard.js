@@ -187,7 +187,10 @@ async function patchCamera(id, data) {
     div.id = `cam-card-${id}`;
     
     div.innerHTML = `
-      <h3 id="name-${id}"></h3>
+      <h3 style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="name-${id}"></span>
+        <button id="btn-rename-${id}" style="background: transparent; border: none; font-size: 0.8em; cursor: pointer;" title="Ubah Nama">✏️</button>
+      </h3>
       <p>● Terhubung <span id="tally-${id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: #555; color: #fff;">OFF</span></p>
       
       <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; margin-bottom: 10px; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
@@ -210,6 +213,19 @@ async function patchCamera(id, data) {
     grid.insertBefore(div, grid.firstChild);
     cameras.set(id, div);
     
+    document.getElementById(`btn-rename-${id}`).onclick = async () => {
+      const currentName = document.getElementById(`name-${id}`).textContent;
+      const newName = prompt('Ubah Nama Kamera:', currentName);
+      if (newName && newName !== currentName) {
+        await fetch('/api/cameras/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ camId: id, name: newName })
+        });
+        document.getElementById(`name-${id}`).textContent = newName;
+      }
+    };
+
     document.getElementById(`btn-obs-${id}`).onclick = async (e) => {
       e.target.disabled = true;
       e.target.textContent = 'Menambahkan...';
