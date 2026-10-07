@@ -38,11 +38,26 @@ function connect() {
       pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       window.pc = pc;
       iceQueue = [];
+      const inboundStream = new MediaStream();
+      let srcObjectSet = false;
       
       pc.ontrack = (event) => {
-        if (!video.srcObject || video.srcObject !== event.streams[0]) {
-          video.srcObject = event.streams[0];
-          playVideo();
+        // Sender uses addTransceiver (sendonly) which does not associate
+        // tracks with a stream, so event.streams is empty. Build our own.
+        // Idempotent: set srcObject exactly once per peer connection.
+        if (!srcObjectSet) {
+          if (event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+          } else {
+            inboundStream.addTrack(event.track);
+            video.srcObject = inboundStream;
+          }
+          srcObjectSet = true;
+          // Ignore AbortError from play() (autoplay policy); no retry loop
+          video.play().catch(() => {});
+        } else if (!event.streams || !event.streams[0]) {
+          // Additional tracks (audio) on the same connection — add to existing stream
+          inboundStream.addTrack(event.track);
         }
       };
       
@@ -87,13 +102,6 @@ function connect() {
   ws.onclose = () => {
     setTimeout(connect, 2000); // Auto-reconnect
   };
-}
-
-function playVideo() {
-  video.play().catch(e => {
-    console.warn("Autoplay failed, retrying...", e);
-    setTimeout(playVideo, 1000);
-  });
 }
 
 connect();

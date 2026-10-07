@@ -62,7 +62,7 @@ function connect() {
   
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
-    console.log('WS msg type:', msg.type);
+    // Task 4: removed per-message "WS msg type" console.log
     if (msg.type === 'obs_status') {
       updateObsStatus(msg.payload.connected);
     } else if (msg.type === 'cam_join') {
@@ -110,24 +110,30 @@ async function handleWebRTCOffer(msg) {
   webrtcs.set(camId, pcInfo);
 
   const videoEl = document.getElementById(`preview-vid-${camId}`);
+  const inboundStream = new MediaStream();
+  let srcObjectSet = false;
   
   pc.ontrack = (event) => {
-    if (videoEl) {
-      if (!videoEl.srcObject || videoEl.srcObject.id !== event.streams[0].id) {
+    if (!videoEl) return;
+    // Idempotent: set srcObject exactly once per peer connection
+    if (!srcObjectSet) {
+      // Sender uses addTransceiver (sendonly) which does not associate
+      // tracks with a stream, so event.streams is empty. Build our own.
+      if (event.streams && event.streams[0]) {
         videoEl.srcObject = event.streams[0];
-        const playVideo = async () => {
-          try {
-            if (videoEl.paused) await videoEl.play();
-          } catch (e) {
-            console.warn("play failed, retrying...", e);
-            setTimeout(playVideo, 500);
-          }
-        };
-        playVideo();
-        const placeholder = document.getElementById(`preview-placeholder-${camId}`);
-        if (placeholder) placeholder.style.display = 'none';
-        videoEl.style.display = 'block';
+      } else {
+        inboundStream.addTrack(event.track);
+        videoEl.srcObject = inboundStream;
       }
+      srcObjectSet = true;
+      // Ignore AbortError from play(); no retry loop
+      videoEl.play().catch(() => {});
+      const placeholder = document.getElementById(`preview-placeholder-${camId}`);
+      if (placeholder) placeholder.style.display = 'none';
+      videoEl.style.display = 'block';
+    } else if (!event.streams || !event.streams[0]) {
+      // Additional tracks (audio) on same connection — add to existing stream
+      inboundStream.addTrack(event.track);
     }
   };
   
@@ -139,12 +145,6 @@ async function handleWebRTCOffer(msg) {
   
   await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
   const answer = await pc.createAnswer();
-  
-  // Cap the preview resolution
-  const senders = pc.getSenders();
-  const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
-  // Unfortunately, scaleResolutionDownBy is for SENDERS, not receivers.
-  // Viewers cannot limit incoming bandwidth easily via WebRTC API unless using simulcast.
   
   await pc.setLocalDescription(answer);
   if (ws.readyState === WebSocket.OPEN) {
@@ -159,10 +159,8 @@ async function handleWebRTCOffer(msg) {
 
 async function loadCamerasSnapshot() {
   try {
-    console.log('Fetching snapshot...');
     const res = await fetch('/api/cameras');
     const list = await res.json();
-    console.log('Snapshot received:', list);
     
     // Mark all existing as potentially stale
     const currentIds = new Set(cameras.keys());

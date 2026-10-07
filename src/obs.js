@@ -66,6 +66,15 @@ export class ObsBridge {
     this.reconnectWithDelay(2000);
   }
 
+  // Broadcast obs_status only when the value actually changes
+  _setConnected(value) {
+    if (this.connected === value) return;
+    this.connected = value;
+    this.signaling.broadcastToDashboards(
+      createEnvelope('obs_status', 'server', 'dashboard', { connected: value })
+    );
+  }
+
   async connect() {
     await this.disconnect();
 
@@ -77,16 +86,14 @@ export class ObsBridge {
       if (!this.connected) {
         console.log('🔗 Connected and Identified to OBS WebSocket');
       }
-      this.connected = true;
-      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: true }));
+      this._setConnected(true);
     });
     
     this.obs.on('ConnectionClosed', () => {
       if (this.connected) {
         console.log('🔌 Disconnected from OBS WebSocket');
       }
-      this.connected = false;
-      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
+      this._setConnected(false);
       this.reconnectWithDelay(Math.min(30000, 2000 * Math.pow(2, this.reconnectAttempt)));
       this.reconnectAttempt++;
     });
@@ -238,8 +245,7 @@ export class ObsBridge {
     if (this.connected) {
       console.log('🔌 Disconnected from OBS WebSocket');
     }
-    this.connected = false;
-    this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
+    this._setConnected(false);
   }
 
   close() {
