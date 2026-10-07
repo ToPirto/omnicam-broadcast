@@ -12,6 +12,10 @@ import { advertiseMDNS } from './mdns.js';
 import { getLocalIPs } from './network.js';
 import { ObsBridge } from './obs.js';
 
+export function generateObsUrl(port, camId) {
+  return `http://127.0.0.1:${port + 1}/view/index.html?camId=${camId}&obs=1`;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -92,7 +96,7 @@ async function start() {
 
   fastify.post('/api/obs/add', async (request, reply) => {
     const { camId } = request.body;
-    const url = `http://127.0.0.1:${config.port + 1}/view/index.html?camId=${camId}`;
+    const url = generateObsUrl(config.port, camId);
     try {
       const exists = await obsBridge.addBrowserSource(`Camera ${camId.substring(0, 4)}`, url);
       return { success: true, exists };

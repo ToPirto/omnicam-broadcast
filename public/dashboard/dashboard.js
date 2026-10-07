@@ -198,8 +198,9 @@ async function patchCamera(id, data) {
       <div id="telemetry-${id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">
         Menunggu data...
       </div>
-      <a href="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
+      <a href="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
       <br><br>
+      <input type="text" value="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1" readonly onclick="this.select(); document.execCommand('copy'); alert('Disalin!')" style="width: 100%; padding: 5px; margin-bottom: 10px; border-radius: 3px; border: 1px solid #555; background: #333; color: #fff; box-sizing: border-box;" title="URL OBS (Klik untuk copy)">
       <button class="btn-add-obs" id="btn-obs-${id}" style="background: #28a745; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
       <button id="btn-disconnect-${id}" style="background: #dc3545; color: white; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px;">Putuskan</button>
       <div style="font-size: 0.8em; color: #666;">ID: ${id}</div>
