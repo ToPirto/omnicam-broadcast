@@ -420,19 +420,33 @@ async function createAndSendOffer(viewerId) {
   }
 }
 
-export function calculatePeerTelemetry(currentStats, lastStats, dt, maxFps) {
+export function calculatePeerTelemetry(currentStats, lastStats, maxFps) {
   let bitrate = 0;
   let fps = 0;
-  if (lastStats && dt > 0) {
-    if (currentStats.bytesSent > lastStats.bytesSent) {
-      bitrate = (currentStats.bytesSent - lastStats.bytesSent) * 8 / dt;
-    }
-    if (currentStats.framesEncoded > lastStats.framesEncoded) {
-      fps = (currentStats.framesEncoded - lastStats.framesEncoded) / dt;
+  let hasTwoSamples = false;
+  
+  if (lastStats && currentStats.timestamp > lastStats.timestamp) {
+    const dt = (currentStats.timestamp - lastStats.timestamp) / 1000;
+    if (dt > 0) {
+      if (currentStats.bytesSent >= lastStats.bytesSent) {
+        bitrate = (currentStats.bytesSent - lastStats.bytesSent) * 8 / dt;
+      }
+      if (currentStats.framesEncoded >= lastStats.framesEncoded) {
+        fps = (currentStats.framesEncoded - lastStats.framesEncoded) / dt;
+      }
+      hasTwoSamples = true;
     }
   }
+  
   fps = Math.min(fps, maxFps);
-  return { bitrate, fps, bytesSent: currentStats.bytesSent, framesEncoded: currentStats.framesEncoded };
+  return { 
+    bitrate, 
+    fps, 
+    bytesSent: currentStats.bytesSent, 
+    framesEncoded: currentStats.framesEncoded,
+    timestamp: currentStats.timestamp,
+    hasTwoSamples
+  };
 }
 
 let peerStats = new Map();
@@ -445,11 +459,10 @@ function startTelemetry() {
   
   telemetryInterval = setInterval(async () => {
     let activePeers = 0;
-    const now = performance.now();
-    const dt = lastTime > 0 ? (now - lastTime) / 1000 : 0;
     
     let mainBitrate = 0;
     let mainFps = 0;
+    let mainValid = false;
     let audioBytesTotal = 0;
     const settings = getTargetVideoSettings(qualityPreset.value);
 
@@ -460,11 +473,13 @@ function startTelemetry() {
         let bytesSent = 0;
         let framesEncoded = 0;
         let audioBytes = 0;
+        let timestamp = performance.now();
         
         stats.forEach(report => {
           if (report.type === 'outbound-rtp' && report.kind === 'video') {
             bytesSent += report.bytesSent;
             framesEncoded += report.framesEncoded;
+            if (report.timestamp) timestamp = report.timestamp;
           }
           if (report.type === 'outbound-rtp' && report.kind === 'audio') {
             audioBytes += report.bytesSent;
@@ -473,23 +488,31 @@ function startTelemetry() {
         
         audioBytesTotal += audioBytes;
 
-        const currentStats = { bytesSent, framesEncoded };
+        const currentStats = { bytesSent, framesEncoded, timestamp };
         const maxFps = id.startsWith('dash-') ? 15 : settings.fps;
-        const result = calculatePeerTelemetry(currentStats, peerStats.get(id), dt, maxFps);
+        const result = calculatePeerTelemetry(currentStats, peerStats.get(id), maxFps);
         peerStats.set(id, result);
 
-        if (!id.startsWith('dash-') || activePeers === 1) {
+        if (id.startsWith('viewer-')) {
+          if (result.hasTwoSamples) {
+            mainBitrate = result.bitrate;
+            mainFps = result.fps;
+            mainValid = true;
+          }
+        } else if (!mainValid && activePeers === 1 && result.hasTwoSamples) {
           mainBitrate = result.bitrate;
           mainFps = result.fps;
+          mainValid = true;
         }
+      } else {
+        peerStats.delete(id); // reset if disconnected
       }
     }
 
     if (activePeers === 0) return;
-    lastTime = now;
 
-    bitrateEl.innerText = `${Math.round(mainBitrate / 1000)} kbps`;
-    fpsEl.innerText = `${Math.round(mainFps)} fps`;
+    bitrateEl.innerText = mainValid ? `${Math.round(mainBitrate / 1000)} kbps` : '- kbps';
+    fpsEl.innerText = mainValid ? `${Math.round(mainFps)} fps` : '- fps';
     
     const audioEl = document.getElementById('audio-level');
     if (audioEl) audioEl.innerText = `🎤 ${audioBytesTotal}`;
