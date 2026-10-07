@@ -51,26 +51,17 @@ export class SignalingServer {
         this.handleAuth(ws, msg);
         break;
       case 'offer':
-        const offerCam = this.registry.getCamera(msg.from);
-        if (offerCam) {
-          offerCam.lastOffer = msg;
-          offerCam.iceCandidates = [];
-        }
         this.relayTo(msg);
         break;
       case 'answer':
         this.relayTo(msg);
         break;
       case 'ice':
-        const iceCam = this.registry.getCamera(msg.from);
-        if (iceCam && iceCam.iceCandidates) {
-           iceCam.iceCandidates.push(msg);
-        }
         this.relayTo(msg);
         break;
       case 'telemetry':
         this.registry.updateTelemetry(msg.from, msg.payload);
-        // Relay to dashboard viewers (simplified: just broadcast to all dashboard clients)
+        // Relay to dashboard viewers
         this.broadcastToDashboards(msg);
         break;
       case 'cam_join':
@@ -78,18 +69,18 @@ export class SignalingServer {
         if (msg.payload && msg.payload.camId) {
           ws.isViewer = true;
           ws.camId = msg.payload.camId;
+          ws.viewerId = msg.from; // Assuming viewer sends unique ID in msg.from
           this.registry.addViewer(msg.payload.camId, ws);
           const cam = this.registry.getCamera(ws.camId);
-          if (cam && cam.lastOffer) {
-            ws.send(JSON.stringify(cam.lastOffer));
-            if (cam.iceCandidates) {
-              cam.iceCandidates.forEach(ice => ws.send(JSON.stringify(ice)));
-            }
+          if (cam && cam.ws && cam.ws.readyState === 1) {
+            cam.ws.send(JSON.stringify(createEnvelope('viewer_join', 'server', ws.camId, { viewerId: ws.viewerId })));
           }
         }
         break;
       case 'dashboard_join':
         ws.isDashboard = true;
+        // Send snapshot (we can just let the dashboard fetch it, or send it here)
+        // Actually, dashboard.js uses fetch('/api/cameras') when it connects (loadCamerasSnapshot)!
         break;
     }
   }
@@ -104,7 +95,7 @@ export class SignalingServer {
     }
 
     if (sessionToken) {
-      // Reconnection logic (simplified for now)
+      // Reconnection logic
       const camId = msg.from;
       const cam = this.registry.getCamera(camId);
       if (cam && cam.sessionToken === sessionToken) {
@@ -114,6 +105,14 @@ export class SignalingServer {
         if (cam.tally !== undefined) {
           ws.send(JSON.stringify(createEnvelope('tally', 'server', camId, { state: cam.tally })));
         }
+        
+        // Notify sender about all connected viewers so it can create offers
+        const viewers = this.registry.getViewers(camId);
+        viewers.forEach(vws => {
+          if (vws.readyState === 1 && vws.viewerId) {
+            ws.send(JSON.stringify(createEnvelope('viewer_join', 'server', camId, { viewerId: vws.viewerId })));
+          }
+        });
         return;
       }
     }
@@ -135,6 +134,14 @@ export class SignalingServer {
 
           // Notify dashboards
           this.broadcastToDashboards(createEnvelope('cam_join', 'server', 'dashboard', { camId }));
+
+          // Notify sender about existing viewers
+          const viewers = this.registry.getViewers(camId);
+          viewers.forEach(vws => {
+            if (vws.readyState === 1 && vws.viewerId) {
+              ws.send(JSON.stringify(createEnvelope('viewer_join', 'server', camId, { viewerId: vws.viewerId })));
+            }
+          });
         } catch (err) {
           ws.send(JSON.stringify(createEnvelope('auth_fail', 'server', msg.from, { reason: err.message })));
         }
@@ -148,11 +155,19 @@ export class SignalingServer {
     if (msg.to.startsWith('cam-')) {
       // Relay to specific camera
       const cam = this.registry.getCamera(msg.to);
-      if (cam && cam.ws.readyState === 1) { // 1 = OPEN
+      if (cam && cam.ws && cam.ws.readyState === 1) { // 1 = OPEN
         cam.ws.send(JSON.stringify(msg));
       }
+    } else if (msg.to.startsWith('viewer-') || msg.to.startsWith('dash-')) {
+      // Relay to specific viewer
+      const viewers = this.registry.getViewers(msg.from); // msg.from is camId
+      viewers.forEach(vws => {
+        if (vws.viewerId === msg.to && vws.readyState === 1) {
+          vws.send(JSON.stringify(msg));
+        }
+      });
     } else {
-      // Relay to viewers of the camera
+      // Relay to all viewers of the camera
       const viewers = this.registry.getViewers(msg.from);
       viewers.forEach(vws => {
         if (vws.readyState === 1) {
@@ -173,7 +188,7 @@ export class SignalingServer {
 
   handleClose(ws) {
     if (ws.camId && !ws.isViewer) {
-      // Camera disconnected (maybe temporary)
+      // Camera disconnected
       this.broadcastToDashboards(createEnvelope('cam_leave', 'server', 'dashboard', { camId: ws.camId }));
       // We don't unregister immediately to allow reconnects
     } else if (ws.isViewer && ws.camId) {

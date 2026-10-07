@@ -4,7 +4,6 @@ const urlParams = new URLSearchParams(window.location.search);
 const token = urlParams.get('token');
 
 let ws;
-let pc;
 let camId = sessionStorage.getItem('omnicam_id') || 'new-cam';
 let sessionToken = sessionStorage.getItem('omnicam_session');
 let localStream;
@@ -12,6 +11,8 @@ let wakeLock = null;
 let currentDeviceId = null;
 let reconnectAttempts = 0;
 let telemetryInterval = null;
+
+let peers = new Map(); // viewerId -> RTCPeerConnection
 
 const statusEl = document.getElementById('status');
 const preview = document.getElementById('preview');
@@ -67,13 +68,13 @@ async function startCamera(deviceId = null) {
     preview.srcObject = localStream;
     preview.style.transform = 'none';
 
-    if (pc) {
+    peers.forEach(pc => {
       const videoTrack = localStream.getVideoTracks()[0];
       const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
       if (sender) {
-        await sender.replaceTrack(videoTrack);
+        sender.replaceTrack(videoTrack).catch(e => console.warn(e));
       }
-    }
+    });
   } catch (err) {
     console.error('Camera error', err);
     alert('Izin kamera ditolak atau kamera tidak tersedia.');
@@ -116,7 +117,6 @@ btnFullscreen.onclick = async () => {
 };
 
 window.addEventListener('orientationchange', async () => {
-  // Try to re-request camera with width>height if landscape
   if (localStream) {
     const isLandscape = window.matchMedia("(orientation: landscape)").matches;
     const constraints = {
@@ -164,23 +164,25 @@ function startConnection() {
     
     if (msg.type === 'auth_ok') {
       console.log('WS state: auth_ok');
-      statusEl.innerText = '● Terautentikasi';
+      statusEl.innerText = '● Terautentikasi (Menunggu Viewer)';
       camId = msg.payload.camId;
       sessionToken = msg.payload.sessionToken;
       sessionStorage.setItem('omnicam_session', sessionToken);
       sessionStorage.setItem('omnicam_id', camId);
-      
-      createAndSendOffer();
     } else if (msg.type === 'auth_fail') {
       console.error('Auth failed:', msg.payload.reason);
       statusEl.innerHTML = `<span style="color: red;">Gagal: ${msg.payload.reason}. Harap scan QR baru.</span>`;
       btnStart.style.display = 'inline-block';
       btnStart.innerText = 'Scan Ulang QR';
       btnStart.onclick = () => window.location.href = '/';
+    } else if (msg.type === 'viewer_join') {
+      createAndSendOffer(msg.payload.viewerId);
     } else if (msg.type === 'answer') {
-      await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
+      const pc = peers.get(msg.from);
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
     } else if (msg.type === 'ice') {
-      if (msg.payload.candidate) {
+      const pc = peers.get(msg.from);
+      if (pc && msg.payload.candidate && !msg.payload.candidate.candidate.includes('.local')) {
         await pc.addIceCandidate(new RTCIceCandidate(msg.payload.candidate));
       }
     } else if (msg.type === 'tally') {
@@ -204,9 +206,31 @@ function startConnection() {
   };
 }
 
-async function createAndSendOffer() {
-  if (pc) pc.close();
-  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+function closePeer(viewerId) {
+  if (peers.has(viewerId)) {
+    peers.get(viewerId).close();
+    peers.delete(viewerId);
+  }
+}
+
+function checkGlobalStatus() {
+  let connected = false;
+  peers.forEach(pc => {
+    if (pc.connectionState === 'connected') connected = true;
+  });
+  if (connected) {
+    statusEl.innerText = '● WebRTC Terhubung (Live)';
+    startTelemetry();
+  } else {
+    statusEl.innerText = '● Terautentikasi (Menunggu Viewer)';
+    stopTelemetry();
+  }
+}
+
+async function createAndSendOffer(viewerId) {
+  closePeer(viewerId);
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  peers.set(viewerId, pc);
   
   localStream.getTracks().forEach(track => {
     const transceiver = pc.addTransceiver(track, { direction: 'sendonly' });
@@ -221,56 +245,73 @@ async function createAndSendOffer() {
   });
 
   pc.onicecandidate = (e) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(createEnvelope('ice', camId, 'server', { candidate: e.candidate })));
+    if (ws.readyState === WebSocket.OPEN && e.candidate) {
+      ws.send(JSON.stringify(createEnvelope('ice', camId, viewerId, { candidate: e.candidate })));
     }
   };
 
   pc.onconnectionstatechange = () => {
-    console.log('RTC connection state:', pc.connectionState);
-    if (pc.connectionState === 'connected') {
-      statusEl.innerText = '● WebRTC Terhubung (Live)';
-      startTelemetry();
-    } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-      statusEl.innerText = '● WebRTC Terputus';
-      stopTelemetry();
+    console.log(`RTC connection state [${viewerId}]:`, pc.connectionState);
+    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      closePeer(viewerId);
     }
+    checkGlobalStatus();
   };
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(createEnvelope('offer', camId, 'server', { sdp: pc.localDescription })));
+    ws.send(JSON.stringify(createEnvelope('offer', camId, viewerId, { sdp: pc.localDescription })));
   }
 }
 
 let lastBytes = 0;
+let lastFrames = 0;
 let lastTime = 0;
 
 function startTelemetry() {
-  stopTelemetry();
+  if (telemetryInterval) return;
+  lastBytes = 0;
+  lastFrames = 0;
+  lastTime = 0;
   telemetryInterval = setInterval(async () => {
-    if (!pc) return;
-    const stats = await pc.getStats();
     let currentBytes = 0;
-    let fps = 0;
-    stats.forEach(report => {
-      if (report.type === 'outbound-rtp' && report.kind === 'video') {
-        currentBytes = report.bytesSent;
-        fps = report.framesEncoded;
+    let framesEncoded = 0;
+    
+    let activePeers = 0;
+    for (let pc of peers.values()) {
+      if (pc.connectionState === 'connected') {
+        activePeers++;
+        const stats = await pc.getStats();
+        stats.forEach(report => {
+          if (report.type === 'outbound-rtp' && report.kind === 'video') {
+            currentBytes += report.bytesSent;
+            framesEncoded += report.framesEncoded;
+          }
+        });
       }
-    });
+    }
 
+    if (activePeers === 0) return;
+    
     const now = performance.now();
     let bitrate = 0;
-    if (lastTime > 0 && currentBytes > lastBytes) {
-      bitrate = (currentBytes - lastBytes) * 8 * 1000 / (now - lastTime);
+    let fps = 0;
+    if (lastTime > 0) {
+      const dt = (now - lastTime) / 1000;
+      if (currentBytes > lastBytes) {
+        bitrate = (currentBytes - lastBytes) * 8 / dt;
+      }
+      if (framesEncoded > lastFrames) {
+        fps = (framesEncoded - lastFrames) / dt;
+      }
     }
     lastBytes = currentBytes;
+    lastFrames = framesEncoded;
     lastTime = now;
 
     bitrateEl.innerText = `${Math.round(bitrate / 1000)} kbps`;
-    fpsEl.innerText = `${fps || 0} fps`;
+    fpsEl.innerText = `${Math.round(fps)} fps`;
 
     let batteryLvl = null;
     if ('getBattery' in navigator) {
@@ -279,7 +320,11 @@ function startTelemetry() {
     }
 
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(createEnvelope('telemetry', camId, 'server', { bitrate, fps, battery: batteryLvl })));
+      ws.send(JSON.stringify(createEnvelope('telemetry', camId, 'server', { 
+        bitrate, 
+        fps: Math.round(fps), 
+        battery: batteryLvl 
+      })));
     }
   }, 1000);
 }
@@ -290,4 +335,3 @@ function stopTelemetry() {
     telemetryInterval = null;
   }
 }
-

@@ -7,7 +7,7 @@ const VALID_TYPES = [
   'tally', 'telemetry',
   'control', 'control_ack', 'control_nack',
   'ping', 'pong', 'bye',
-  'cam_join', 'cam_leave',
+  'cam_join', 'cam_leave', 'dashboard_join', 'obs_status', 'viewer_join'
 ];
 
 let seq = 0;

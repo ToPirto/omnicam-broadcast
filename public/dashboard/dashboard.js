@@ -6,10 +6,16 @@ const grid = document.getElementById('cam-grid');
 const btnAdd = document.getElementById('btn-add');
 const qrContainer = document.getElementById('qr-container');
 
+// Connection Banner
+const banner = document.createElement('div');
+banner.style = "position: fixed; top: 0; left: 0; width: 100%; background: #d9534f; color: white; text-align: center; padding: 5px; z-index: 9999; display: none;";
+banner.innerText = "Dashboard terputus, menyambung ulang...";
+document.body.appendChild(banner);
+
 function updateObsStatus(connected) {
   const statusEl = document.getElementById('obs-status');
   if (statusEl) {
-    statusEl.innerHTML = connected ? ' - <span style="color:#0f0;">OBS Terhubung</span>' : ' - <span style="color:#f00;">OBS Tidak Terhubung (Buka OBS dan aktifkan WebSocket Server di Tools > WebSocket Server Settings)</span>';
+    statusEl.innerHTML = connected ? ' - <span style="color:#0f0;">OBS Terhubung</span>' : ' - <span style="color:#f00;">OBS Tidak Terhubung (Buka OBS dan aktifkan WebSocket Server)</span>';
   }
 }
 
@@ -39,111 +45,300 @@ document.getElementById('btn-save-settings').onclick = async () => {
 loadSettings();
 
 let ws;
-const cameras = new Map();
+const cameras = new Map(); // camId -> card Element
+const webrtcs = new Map(); // camId -> RTCPeerConnection
+let reconnectAttempts = 0;
 
 function connect() {
   ws = new WebSocket(`wss://${window.location.host}`);
   
   ws.onopen = () => {
+    console.log('WS connected');
+    banner.style.display = 'none';
+    reconnectAttempts = 0;
     ws.send(JSON.stringify(createEnvelope('dashboard_join', 'dashboard', 'server')));
-    loadCameras();
+    loadCamerasSnapshot();
   };
   
-  ws.onmessage = (e) => {
+  ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
+    console.log('WS msg type:', msg.type);
     if (msg.type === 'obs_status') {
       updateObsStatus(msg.payload.connected);
-    } else if (msg.type === 'cam_join' || msg.type === 'cam_leave') {
-      loadCameras();
+    } else if (msg.type === 'cam_join') {
+      await patchCamera(msg.payload.camId || msg.payload.id || msg.from, { id: msg.payload.camId || msg.payload.id || msg.from, tally: 0, status: 'online' });
+    } else if (msg.type === 'cam_leave') {
+      const camId = msg.payload.camId || msg.from;
+      updateCameraUI(camId, { status: 'offline' });
     } else if (msg.type === 'telemetry') {
-      // Update telemetry on card
       const camId = msg.from;
-      if (cameras.has(camId)) {
-        const data = msg.payload;
-        const el = document.getElementById(`telemetry-${camId}`);
-        if (el) {
-          el.innerHTML = `🔋 ${data.battery ? Math.round(data.battery * 100) + '%' : 'N/A'}<br>⚡ ${data.bitrate ? Math.round(data.bitrate/1000) : 0} kbps | ${data.fps || 0} fps`;
-        }
-      }
+      updateCameraUI(camId, { lastTelemetry: msg.payload });
     } else if (msg.type === 'tally') {
       const camId = msg.payload.camId || msg.from;
-      if (cameras.has(camId)) {
-        const el = document.getElementById(`tally-${camId}`);
-        if (el) {
-           const state = msg.payload.state;
-           if (state === 2) {
-             el.innerText = 'PROGRAM';
-             el.style.background = '#f00';
-             el.style.color = '#fff';
-           } else if (state === 1) {
-             el.innerText = 'PREVIEW';
-             el.style.background = '#0f0';
-             el.style.color = '#000';
-           } else {
-             el.innerText = 'OFF';
-             el.style.background = '#555';
-             el.style.color = '#fff';
-           }
+      updateCameraUI(camId, { tally: msg.payload.state });
+    } else if (msg.type === 'offer') {
+      handleWebRTCOffer(msg);
+    } else if (msg.type === 'ice') {
+      const pcInfo = webrtcs.get(msg.from);
+      if (pcInfo && pcInfo.pc && msg.payload.candidate && !msg.payload.candidate.candidate.includes('.local')) {
+        if (pcInfo.pc.remoteDescription && pcInfo.pc.remoteDescription.type) {
+           await pcInfo.pc.addIceCandidate(new RTCIceCandidate(msg.payload.candidate)).catch(err => console.warn(err));
+        } else {
+           pcInfo.iceQueue.push(msg.payload.candidate);
         }
       }
     }
   };
   
-  ws.onclose = () => setTimeout(connect, 2000);
+  ws.onclose = () => {
+    banner.style.display = 'block';
+    reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
+    setTimeout(connect, delay);
+  };
 }
 
-async function loadCameras() {
-  const res = await fetch('/api/cameras');
-  const list = await res.json();
+async function handleWebRTCOffer(msg) {
+  const camId = msg.from; // Offer comes from camera
+  const viewerId = msg.to; // This specific dashboard viewer ID
+  let pcInfo = webrtcs.get(camId);
   
-  // Clear old camera cards (keep the first add-cam card)
-  const cards = grid.querySelectorAll('.cam-card');
-  cards.forEach(c => c.remove());
+  if (pcInfo && pcInfo.pc) pcInfo.pc.close();
   
-  cameras.clear();
-  list.forEach(cam => {
-    cameras.set(cam.id, cam);
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  pcInfo = { pc, iceQueue: [], viewerId };
+  webrtcs.set(camId, pcInfo);
+
+  const videoEl = document.getElementById(`preview-vid-${camId}`);
+  
+  pc.ontrack = (event) => {
+    if (videoEl) {
+      if (!videoEl.srcObject || videoEl.srcObject.id !== event.streams[0].id) {
+        videoEl.srcObject = event.streams[0];
+        const playVideo = async () => {
+          try {
+            if (videoEl.paused) await videoEl.play();
+          } catch (e) {
+            console.warn("play failed, retrying...", e);
+            setTimeout(playVideo, 500);
+          }
+        };
+        playVideo();
+        const placeholder = document.getElementById(`preview-placeholder-${camId}`);
+        if (placeholder) placeholder.style.display = 'none';
+        videoEl.style.display = 'block';
+      }
+    }
+  };
+  
+  pc.onicecandidate = (event) => {
+    if (event.candidate && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(createEnvelope('ice', viewerId, camId, { candidate: event.candidate })));
+    }
+  };
+  
+  await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
+  const answer = await pc.createAnswer();
+  
+  // Cap the preview resolution
+  const senders = pc.getSenders();
+  const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
+  // Unfortunately, scaleResolutionDownBy is for SENDERS, not receivers.
+  // Viewers cannot limit incoming bandwidth easily via WebRTC API unless using simulcast.
+  
+  await pc.setLocalDescription(answer);
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(createEnvelope('answer', viewerId, camId, { sdp: pc.localDescription })));
+  }
+
+  while (pcInfo.iceQueue.length > 0) {
+    const candidate = pcInfo.iceQueue.shift();
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  }
+}
+
+async function loadCamerasSnapshot() {
+  try {
+    console.log('Fetching snapshot...');
+    const res = await fetch('/api/cameras');
+    const list = await res.json();
+    console.log('Snapshot received:', list);
+    
+    // Mark all existing as potentially stale
+    const currentIds = new Set(cameras.keys());
+    
+    for (const cam of list) {
+      currentIds.delete(cam.id);
+      await patchCamera(cam.id, cam);
+    }
+    
+    // Remove cameras not in snapshot
+    for (const staleId of currentIds) {
+      removeCamera(staleId);
+    }
+  } catch (err) {
+    console.error('Snapshot error:', err);
+  }
+}
+
+async function patchCamera(id, data) {
+  if (!cameras.has(id)) {
+    // Create new card
     const div = document.createElement('div');
     div.className = 'card cam-card';
-    const tallyBg = cam.tally === 2 ? '#f00' : cam.tally === 1 ? '#0f0' : '#555';
-    const tallyColor = cam.tally === 1 ? '#000' : '#fff';
-    const tallyText = cam.tally === 2 ? 'PROGRAM' : cam.tally === 1 ? 'PREVIEW' : 'OFF';
+    div.id = `cam-card-${id}`;
+    
     div.innerHTML = `
-      <h3></h3>
-      <p>● Terhubung <span id="tally-${cam.id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: ${tallyBg}; color: ${tallyColor};">${tallyText}</span></p>
-      <div id="telemetry-${cam.id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">
+      <h3 id="name-${id}"></h3>
+      <p>● Terhubung <span id="tally-${id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: #555; color: #fff;">OFF</span></p>
+      
+      <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; margin-bottom: 10px; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+         <div id="preview-placeholder-${id}" style="color: #888;">Menunggu video...</div>
+         <video id="preview-vid-${id}" muted autoplay playsinline style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
+      </div>
+
+      <div id="telemetry-${id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">
         Menunggu data...
       </div>
-      <a href="/view/index.html?camId=${cam.id}" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
+      <a href="/view/index.html?camId=${id}" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
       <br><br>
-      <button class="btn-add-obs" data-id="${cam.id}" style="background: #28a745; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
-      <div style="font-size: 0.8em; color: #666;">ID: ${cam.id}</div>
+      <button class="btn-add-obs" id="btn-obs-${id}" style="background: #28a745; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
+      <div style="font-size: 0.8em; color: #666;">ID: ${id}</div>
     `;
-    div.querySelector('h3').textContent = cam.name;
+    
+    // Add to DOM BEFORE grid.firstChild (which is the add card or other cameras)
     grid.insertBefore(div, grid.firstChild);
-  });
-  
-  document.querySelectorAll('.btn-add-obs').forEach(btn => {
-    btn.onclick = async (e) => {
-      const camId = e.target.getAttribute('data-id');
+    cameras.set(id, div);
+    
+    document.getElementById(`btn-obs-${id}`).onclick = async (e) => {
       e.target.disabled = true;
-      e.target.innerText = 'Menambahkan...';
+      e.target.textContent = 'Menambahkan...';
       const res = await fetch('/api/obs/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camId })
+        body: JSON.stringify({ camId: id })
       });
-      const data = await res.json();
-      if (data.success) {
-        e.target.innerText = data.exists ? 'Berhasil Diperbarui di OBS' : 'Berhasil Ditambahkan';
+      const resData = await res.json();
+      if (resData.success) {
+        e.target.textContent = resData.exists ? 'Berhasil Diperbarui di OBS' : 'Berhasil Ditambahkan';
       } else {
-        alert('Gagal: ' + data.error);
-        e.target.innerText = '+ Tambah Otomatis ke OBS';
+        alert('Gagal: ' + resData.error);
+        e.target.textContent = '+ Tambah Otomatis ke OBS';
         e.target.disabled = false;
       }
     };
-  });
+
+    // Request a WebRTC connection for preview
+    const viewerId = 'dash-' + Math.random().toString(36).substring(2, 10);
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId: id })));
+    }
+  }
+
+  updateCameraUI(id, data);
 }
+
+function updateCameraUI(id, data) {
+  const card = cameras.get(id);
+  if (!card) return;
+
+  if (data.name !== undefined) {
+    document.getElementById(`name-${id}`).textContent = data.name || `Kamera ${id.substring(0, 4)}`;
+  }
+  
+  if (data.tally !== undefined) {
+    const el = document.getElementById(`tally-${id}`);
+    if (el) {
+       if (data.tally === 2) {
+         el.textContent = 'PROGRAM';
+         el.style.background = '#f00';
+         el.style.color = '#fff';
+       } else if (data.tally === 1) {
+         el.textContent = 'PREVIEW';
+         el.style.background = '#0f0';
+         el.style.color = '#000';
+       } else {
+         el.textContent = 'OFF';
+         el.style.background = '#555';
+         el.style.color = '#fff';
+       }
+    }
+  }
+
+  if (data.status) {
+    const placeholder = document.getElementById(`preview-placeholder-${id}`);
+    const videoEl = document.getElementById(`preview-vid-${id}`);
+    if (data.status === 'offline') {
+      if (placeholder) {
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'Kamera terputus';
+        placeholder.style.color = '#d9534f';
+      }
+      if (videoEl) videoEl.style.display = 'none';
+      
+      const pcInfo = webrtcs.get(id);
+      if (pcInfo && pcInfo.pc) {
+        pcInfo.pc.close();
+        webrtcs.delete(id);
+      }
+    } else if (data.status === 'online') {
+      if (placeholder) {
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'Menunggu video...';
+        placeholder.style.color = '#888';
+      }
+      if (videoEl) videoEl.style.display = 'none';
+      
+      // Request WebRTC connection again if it was offline
+      if (!webrtcs.has(id)) {
+        const viewerId = 'dash-' + Math.random().toString(36).substring(2, 10);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId: id })));
+        }
+      }
+    }
+  }
+
+  if (data.lastTelemetry) {
+    const el = document.getElementById(`telemetry-${id}`);
+    if (el) {
+      const bat = data.lastTelemetry.battery ? Math.round(data.lastTelemetry.battery * 100) + '%' : 'N/A';
+      const bit = data.lastTelemetry.bitrate ? Math.round(data.lastTelemetry.bitrate/1000) : 0;
+      const fps = data.lastTelemetry.fps || 0;
+      el.textContent = `🔋 ${bat} | ⚡ ${bit} kbps | ${fps} fps`;
+    }
+  }
+}
+
+function removeCamera(id) {
+  const card = cameras.get(id);
+  if (card) {
+    card.remove();
+    cameras.delete(id);
+  }
+  const pcInfo = webrtcs.get(id);
+  if (pcInfo && pcInfo.pc) {
+    pcInfo.pc.close();
+    webrtcs.delete(id);
+  }
+}
+
+// Pause/resume preview based on visibility
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+     // pause videos
+     webrtcs.forEach((pcInfo, camId) => {
+       const videoEl = document.getElementById(`preview-vid-${camId}`);
+       if (videoEl) videoEl.pause();
+     });
+  } else {
+     // resume videos
+     webrtcs.forEach((pcInfo, camId) => {
+       const videoEl = document.getElementById(`preview-vid-${camId}`);
+       if (videoEl && videoEl.srcObject) videoEl.play().catch(()=>{});
+     });
+  }
+});
 
 btnAdd.onclick = async () => {
   btnAdd.disabled = true;
@@ -151,7 +346,17 @@ btnAdd.onclick = async () => {
   try {
     const res = await fetch('/api/token');
     const data = await res.json();
-    qrContainer.innerHTML = `<img src="${data.qr}" alt="QR Code"><br><a href="${data.url}" target="_blank" style="color: #4da6ff; word-break: break-all;">${data.url}</a>`;
+    qrContainer.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = data.qr;
+    const a = document.createElement('a');
+    a.href = data.url;
+    a.target = '_blank';
+    a.style = "color: #4da6ff; word-break: break-all;";
+    a.textContent = data.url;
+    qrContainer.appendChild(img);
+    qrContainer.appendChild(document.createElement('br'));
+    qrContainer.appendChild(a);
   } catch (err) {
     alert('Gagal membuat QR');
   }

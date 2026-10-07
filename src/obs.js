@@ -7,42 +7,9 @@ export class ObsBridge {
     this.signaling = signaling;
     this.obs = new OBSWebSocket();
     this.connected = false;
-
-    
-    // map of camId -> tally state (0: off, 1: preview, 2: program)
     this.tallyState = new Map();
     this.inputToCamId = new Map();
-
-    this.obs.on('Identified', () => {
-      console.log('🔗 Connected and Identified to OBS WebSocket');
-      this.connected = true;
-      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: true }));
-    });
-    
-    this.obs.on('ConnectionClosed', () => {
-      console.log('🔌 Disconnected from OBS WebSocket');
-      this.connected = false;
-      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
-      this.reconnect();
-    });
-
-    const triggerUpdate = () => {
-      if (this.updateTimeout) clearTimeout(this.updateTimeout);
-      this.updateTimeout = setTimeout(() => this.updateTally(), 100);
-    };
-
-    this.obs.on('CurrentProgramSceneChanged', triggerUpdate);
-    this.obs.on('CurrentPreviewSceneChanged', triggerUpdate);
-    this.obs.on('SceneItemEnableStateChanged', triggerUpdate);
-    this.obs.on('SceneItemCreated', triggerUpdate);
-    this.obs.on('SceneItemRemoved', triggerUpdate);
-    this.obs.on('InputCreated', triggerUpdate);
-    this.obs.on('InputNameChanged', triggerUpdate);
-    
-    // Poll every 5 seconds just in case of missed events or new URLs
-    this.pollInterval = setInterval(() => {
-      if (this.connected) this.updateTally();
-    }, 5000);
+    this.reconnectAttempt = 0;
   }
 
   updateConfig(config) {
@@ -52,7 +19,6 @@ export class ObsBridge {
 
   async addBrowserSource(name, url) {
     if (!this.connected) throw new Error('Not connected to OBS');
-    // Get current program scene to add to
     const programResp = await this.obs.call('GetCurrentProgramScene');
     const sceneName = programResp.currentProgramSceneName;
     
@@ -70,7 +36,6 @@ export class ObsBridge {
         inputSettings: { url: url }
       });
     } else {
-      // Create the input
       await this.obs.call('CreateInput', {
         sceneName,
         inputName: name,
@@ -79,7 +44,7 @@ export class ObsBridge {
           url: url,
           width: 1920,
           height: 1080,
-          reroute_audio: true // "Control audio via OBS"
+          reroute_audio: true
         },
         sceneItemEnabled: true
       });
@@ -90,9 +55,10 @@ export class ObsBridge {
   }
 
   reconnectWithDelay(delay) {
-    this.disconnect();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => this.connect(), delay);
+    this.reconnectTimer = setTimeout(() => {
+      this.connect().catch(() => {});
+    }, delay);
   }
 
   reconnect() {
@@ -101,19 +67,57 @@ export class ObsBridge {
   }
 
   async connect() {
+    await this.disconnect();
+
+    if (!this.obs) {
+      this.obs = new OBSWebSocket();
+    }
+
+    this.obs.on('Identified', () => {
+      if (!this.connected) {
+        console.log('🔗 Connected and Identified to OBS WebSocket');
+      }
+      this.connected = true;
+      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: true }));
+    });
+    
+    this.obs.on('ConnectionClosed', () => {
+      if (this.connected) {
+        console.log('🔌 Disconnected from OBS WebSocket');
+      }
+      this.connected = false;
+      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
+      this.reconnectWithDelay(Math.min(30000, 2000 * Math.pow(2, this.reconnectAttempt)));
+      this.reconnectAttempt++;
+    });
+
+    const triggerUpdate = () => {
+      if (this.updateTimeout) clearTimeout(this.updateTimeout);
+      this.updateTimeout = setTimeout(() => this.updateTally(), 100);
+    };
+
+    this.obs.on('CurrentProgramSceneChanged', triggerUpdate);
+    this.obs.on('CurrentPreviewSceneChanged', triggerUpdate);
+    this.obs.on('SceneItemEnableStateChanged', triggerUpdate);
+    this.obs.on('SceneItemCreated', triggerUpdate);
+    this.obs.on('SceneItemRemoved', triggerUpdate);
+    this.obs.on('InputCreated', triggerUpdate);
+    this.obs.on('InputNameChanged', triggerUpdate);
+
+    this.pollInterval = setInterval(() => {
+      if (this.connected) this.updateTally();
+    }, 5000);
+
     try {
       await this.obs.connect(this.config.obsWsUrl, this.config.obsWsPassword);
       this.reconnectAttempt = 0;
       await this.updateTally();
     } catch (err) {
-      const delay = Math.min(30000, 2000 * Math.pow(2, this.reconnectAttempt || 0));
-      this.reconnectAttempt = (this.reconnectAttempt || 0) + 1;
-      
-      if (this.reconnectAttempt === 1) {
+      if (this.reconnectAttempt === 0) {
         console.error(`Failed to connect to OBS WebSocket: ${err.message}. Retrying...`);
       }
-      
-      this.reconnectWithDelay(delay);
+      this.reconnectWithDelay(Math.min(30000, 2000 * Math.pow(2, this.reconnectAttempt)));
+      this.reconnectAttempt++;
     }
   }
 
@@ -130,12 +134,10 @@ export class ObsBridge {
         const urlStr = settings.inputSettings.url || '';
         let camId = null;
         try {
-          // It could be a relative or absolute URL
           const parsed = new URL(urlStr, 'http://localhost');
           if (parsed.pathname.startsWith('/view/')) {
              camId = parsed.searchParams.get('camId');
              if (!camId) {
-               // Fallback to old format /view/cam-123
                const match = parsed.pathname.match(/\/view\/([^/]+)/);
                if (match && match[1] !== 'index.html') {
                  camId = match[1];
@@ -191,15 +193,12 @@ export class ObsBridge {
                await checkScene(item.sourceName, tallyLevel);
             }
           }
-        } catch (e) {
-          // Scene might not exist or other error
-        }
+        } catch (e) { }
       };
 
       await checkScene(previewScene, 1);
       await checkScene(programScene, 2);
 
-      // Check all registered cameras, not just those currently in OBS
       const allCameras = this.signaling.registry.listCameras();
       
       for (const cam of allCameras) {
@@ -224,18 +223,26 @@ export class ObsBridge {
     }
   }
 
-  disconnect() {
+  async disconnect() {
     if (this.updateTimeout) clearTimeout(this.updateTimeout);
-    if (this.connected) {
-      this.obs.disconnect();
-      this.connected = false;
-      this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    
+    if (this.obs) {
+      this.obs.removeAllListeners();
+      if (this.connected) {
+        try { await this.obs.disconnect(); } catch(e) {}
+      }
+      this.obs = null;
     }
+    if (this.connected) {
+      console.log('🔌 Disconnected from OBS WebSocket');
+    }
+    this.connected = false;
+    this.signaling.broadcastToDashboards(createEnvelope('obs_status', 'server', 'dashboard', { connected: false }));
   }
 
   close() {
-    clearInterval(this.pollInterval);
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.disconnect();
   }
 }
