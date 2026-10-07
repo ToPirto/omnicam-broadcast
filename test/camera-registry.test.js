@@ -1,11 +1,23 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CameraRegistry } from '../src/camera-registry.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 describe('CameraRegistry', () => {
   let registry;
+  const dataFile = path.join(process.cwd(), 'data', 'cameras.json');
 
   beforeEach(() => {
+    if (fs.existsSync(dataFile)) {
+      fs.unlinkSync(dataFile);
+    }
     registry = new CameraRegistry(2);
+  });
+  
+  afterEach(() => {
+    if (fs.existsSync(dataFile)) {
+      fs.unlinkSync(dataFile);
+    }
   });
 
   it('registers and retrieves camera', () => {
