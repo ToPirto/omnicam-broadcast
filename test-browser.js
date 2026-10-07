@@ -103,6 +103,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
 
     console.log('Opening sender (camera) page:', camUrl.toString());
     const senderPage = await browser.newPage();
+    senderPage.on('console', msg => console.log('[SENDER]', msg.text()));
     await senderPage.goto(camUrl.toString());
 
     await senderPage.waitForSelector('#btn-start');
@@ -196,13 +197,15 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     const s1 = await viewPage.evaluate(async () => {
       const v = document.getElementById('video');
       let framesDecoded = 0;
+      let audioBytesReceived = 0;
       if (window.pc) {
         const stats = await window.pc.getStats();
         stats.forEach((r) => {
           if (r.type === 'inbound-rtp' && r.kind === 'video') framesDecoded = r.framesDecoded;
+          if (r.type === 'inbound-rtp' && r.kind === 'audio') audioBytesReceived = r.bytesReceived;
         });
       }
-      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded };
+      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded, audioBytesReceived };
     });
 
     await new Promise((r) => setTimeout(r, 2000));
@@ -211,13 +214,15 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     const s2 = await viewPage.evaluate(async () => {
       const v = document.getElementById('video');
       let framesDecoded = 0;
+      let audioBytesReceived = 0;
       if (window.pc) {
         const stats = await window.pc.getStats();
         stats.forEach((r) => {
           if (r.type === 'inbound-rtp' && r.kind === 'video') framesDecoded = r.framesDecoded;
+          if (r.type === 'inbound-rtp' && r.kind === 'audio') audioBytesReceived = r.bytesReceived;
         });
       }
-      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded };
+      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded, audioBytesReceived };
     });
 
     console.log('/view Sample 1:', s1);
@@ -227,6 +232,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(s1.width > 0, '/view videoWidth must be > 0');
     assert(s2.currentTime > s1.currentTime, '/view currentTime must advance between two samples');
     assert(s2.framesDecoded > s1.framesDecoded, '/view framesDecoded must advance between two samples');
+    assert(s2.audioBytesReceived > s1.audioBytesReceived, '/view audio bytesReceived must advance between two samples');
     console.log('/view WebRTC assertions passed.');
 
     // ── 9. Disconnect via Dashboard ("Putuskan") ────────────────────

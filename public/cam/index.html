@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OmniCam Sender</title>
+  <link rel="manifest" href="/cam/manifest.json">
   <link rel="stylesheet" href="/cam/sender.css">
 </head>
 <body>
@@ -18,17 +19,24 @@
       <span id="resolution">0x0</span> | 
       <span id="bitrate">0 kbps</span> | 
       <span id="fps">0 fps</span> | 
+      <span id="audio-level">🎤 0</span> | 
       <span id="battery">🔋 --</span>
     </div>
     <div class="controls">
       <button id="btn-start">Mulai Kamera</button>
+      <button id="btn-mute" style="display:none;">Mute</button>
+      <button id="btn-disconnect" style="display:none; background: #dc3545; color: white;">Putus</button>
       <select id="cam-select"></select>
       <select id="quality-preset">
         <option value="720p30_2500">720p30 (2500 kbps)</option>
         <option value="1080p30_5000" selected>1080p30 (5000 kbps)</option>
         <option value="1080p60_8000">1080p60 (8000 kbps)</option>
       </select>
-      <button id="btn-disconnect" style="display:none; background: #dc3545; color: white;">Putus</button>
+      <div style="font-size: 0.8em; margin-top: 5px;">
+        <label><input type="checkbox" id="chk-echo"> Echo</label>
+        <label><input type="checkbox" id="chk-noise"> Noise</label>
+        <label><input type="checkbox" id="chk-agc"> AGC</label>
+      </div>
     </div>
   </div>
 

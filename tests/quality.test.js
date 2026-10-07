@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getTargetVideoSettings } from '../public/cam/sender.js';
+import { getTargetVideoSettings, calculatePeerTelemetry } from '../public/cam/sender.js';
 
 describe('Quality Preset Logic', () => {
   it('returns correct settings for 720p30', () => {
@@ -27,5 +27,28 @@ describe('Quality Preset Logic', () => {
     
     const s2 = getTargetVideoSettings('unknown');
     expect(s2).toEqual(s);
+  });
+});
+
+describe('calculatePeerTelemetry', () => {
+  it('calculates bitrate and fps correctly', () => {
+    const current = { bytesSent: 2000, framesEncoded: 100 };
+    const last = { bytesSent: 1000, framesEncoded: 70 };
+    
+    // dt = 1 second
+    const res = calculatePeerTelemetry(current, last, 1, 30);
+    expect(res.bitrate).toBe(8000); // (2000-1000)*8 / 1
+    expect(res.fps).toBe(30); // 30 (cap)
+    
+    // Test fps without capping
+    const res2 = calculatePeerTelemetry(current, last, 1, 60);
+    expect(res2.fps).toBe(30); // (100-70) / 1
+  });
+
+  it('handles zero dt and missing last stats', () => {
+    const current = { bytesSent: 1000, framesEncoded: 30 };
+    const res = calculatePeerTelemetry(current, null, 1, 30);
+    expect(res.bitrate).toBe(0);
+    expect(res.fps).toBe(0);
   });
 });

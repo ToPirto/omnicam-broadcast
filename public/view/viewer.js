@@ -9,7 +9,8 @@ if (!camId) {
 }
 
 const video = document.getElementById('video');
-video.muted = true;
+const isOBS = urlParams.get('obs') === '1';
+video.muted = !isOBS;
 video.autoplay = true;
 video.playsInline = true;
 
@@ -48,7 +49,7 @@ function connect() {
     if (msg.type === 'offer') {
       console.log('[VIEWER] Received offer');
       if (pc) pc.close();
-      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc = new RTCPeerConnection({ iceServers: [] });
       window.pc = pc;
       iceQueue = [];
       const inboundStream = new MediaStream();

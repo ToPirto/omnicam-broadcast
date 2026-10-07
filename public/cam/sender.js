@@ -62,6 +62,10 @@ async function startCamera(deviceId = null) {
     localStream.getTracks().forEach(t => t.stop());
   }
 
+  const chkEcho = document.getElementById('chk-echo');
+  const chkNoise = document.getElementById('chk-noise');
+  const chkAgc = document.getElementById('chk-agc');
+
   const settings = getTargetVideoSettings(qualityPreset.value);
   const constraints = {
     video: {
@@ -69,7 +73,11 @@ async function startCamera(deviceId = null) {
       height: { ideal: settings.height },
       frameRate: { ideal: settings.fps }
     },
-    audio: { echoCancellation: true, noiseSuppression: true }
+    audio: { 
+      echoCancellation: chkEcho ? chkEcho.checked : false, 
+      noiseSuppression: chkNoise ? chkNoise.checked : false,
+      autoGainControl: chkAgc ? chkAgc.checked : false
+    }
   };
 
   if (deviceId) {
@@ -170,8 +178,39 @@ if (!isNode) {
       }
     }
   });
+  const btnMute = document.getElementById('btn-mute');
+  const chkEcho = document.getElementById('chk-echo');
+  const chkNoise = document.getElementById('chk-noise');
+  const chkAgc = document.getElementById('chk-agc');
+  
+  let isMuted = false;
+
+  btnMute.onclick = () => {
+    isMuted = !isMuted;
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !isMuted;
+      }
+    }
+    btnMute.innerText = isMuted ? 'Unmute' : 'Mute';
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(createEnvelope('mute_state', camId, 'server', { muted: isMuted })));
+    }
+  };
 
   btnStart.onclick = async () => {
+    try {
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch (e) {
+      console.warn('Orientation lock failed:', e);
+    }
+    
     await requestWakeLock();
     await populateCameras();
     await startCamera(currentDeviceId);
@@ -179,6 +218,7 @@ if (!isNode) {
     startConnection();
     btnStart.style.display = 'none';
     btnDisconnect.style.display = 'inline-block';
+    btnMute.style.display = 'inline-block';
     
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
@@ -332,7 +372,7 @@ function applyQualityParameters(pc, viewerId) {
 
 async function createAndSendOffer(viewerId) {
   closePeer(viewerId);
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  const pc = new RTCPeerConnection({ iceServers: [] });
   peers.set(viewerId, pc);
   
   localStream.getTracks().forEach(track => {
@@ -363,60 +403,96 @@ async function createAndSendOffer(viewerId) {
     checkGlobalStatus();
   };
 
-  const offer = await pc.createOffer();
+  let offer = await pc.createOffer();
+  
+  // SDP Munging for start/min/max bitrates
+  const settings = getTargetVideoSettings(qualityPreset.value);
+  const isDashboard = viewerId.startsWith('dash-');
+  const maxKbps = isDashboard ? 500 : Math.round(settings.bitrate / 1000);
+  const minKbps = Math.round(maxKbps * 0.1);
+  const startKbps = Math.round(maxKbps * 0.5);
+  offer.sdp = offer.sdp.replace(/(a=fmtp:\d+ .*)/g, `$1;x-google-max-bitrate=${maxKbps};x-google-min-bitrate=${minKbps};x-google-start-bitrate=${startKbps}`);
+  offer.sdp = offer.sdp.replace(/(a=rtpmap:(\d+) opus\/48000\/2)/gi, '$1\r\na=fmtp:$2 stereo=1; sprop-stereo=1');
+  
   await pc.setLocalDescription(offer);
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(createEnvelope('offer', camId, viewerId, { sdp: pc.localDescription })));
   }
 }
 
-let lastBytes = 0;
-let lastFrames = 0;
+export function calculatePeerTelemetry(currentStats, lastStats, dt, maxFps) {
+  let bitrate = 0;
+  let fps = 0;
+  if (lastStats && dt > 0) {
+    if (currentStats.bytesSent > lastStats.bytesSent) {
+      bitrate = (currentStats.bytesSent - lastStats.bytesSent) * 8 / dt;
+    }
+    if (currentStats.framesEncoded > lastStats.framesEncoded) {
+      fps = (currentStats.framesEncoded - lastStats.framesEncoded) / dt;
+    }
+  }
+  fps = Math.min(fps, maxFps);
+  return { bitrate, fps, bytesSent: currentStats.bytesSent, framesEncoded: currentStats.framesEncoded };
+}
+
+let peerStats = new Map();
 let lastTime = 0;
 
 function startTelemetry() {
   if (telemetryInterval) return;
-  lastBytes = 0;
-  lastFrames = 0;
+  peerStats.clear();
   lastTime = 0;
+  
   telemetryInterval = setInterval(async () => {
-    let currentBytes = 0;
-    let framesEncoded = 0;
-    
     let activePeers = 0;
-    for (let pc of peers.values()) {
+    const now = performance.now();
+    const dt = lastTime > 0 ? (now - lastTime) / 1000 : 0;
+    
+    let mainBitrate = 0;
+    let mainFps = 0;
+    let audioBytesTotal = 0;
+    const settings = getTargetVideoSettings(qualityPreset.value);
+
+    for (let [id, pc] of peers.entries()) {
       if (pc.connectionState === 'connected') {
         activePeers++;
         const stats = await pc.getStats();
+        let bytesSent = 0;
+        let framesEncoded = 0;
+        let audioBytes = 0;
+        
         stats.forEach(report => {
           if (report.type === 'outbound-rtp' && report.kind === 'video') {
-            currentBytes += report.bytesSent;
+            bytesSent += report.bytesSent;
             framesEncoded += report.framesEncoded;
           }
+          if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+            audioBytes += report.bytesSent;
+          }
         });
+        
+        audioBytesTotal += audioBytes;
+
+        const currentStats = { bytesSent, framesEncoded };
+        const maxFps = id.startsWith('dash-') ? 15 : settings.fps;
+        const result = calculatePeerTelemetry(currentStats, peerStats.get(id), dt, maxFps);
+        peerStats.set(id, result);
+
+        if (!id.startsWith('dash-') || activePeers === 1) {
+          mainBitrate = result.bitrate;
+          mainFps = result.fps;
+        }
       }
     }
 
     if (activePeers === 0) return;
-    
-    const now = performance.now();
-    let bitrate = 0;
-    let fps = 0;
-    if (lastTime > 0) {
-      const dt = (now - lastTime) / 1000;
-      if (currentBytes > lastBytes) {
-        bitrate = (currentBytes - lastBytes) * 8 / dt;
-      }
-      if (framesEncoded > lastFrames) {
-        fps = (framesEncoded - lastFrames) / dt;
-      }
-    }
-    lastBytes = currentBytes;
-    lastFrames = framesEncoded;
     lastTime = now;
 
-    bitrateEl.innerText = `${Math.round(bitrate / 1000)} kbps`;
-    fpsEl.innerText = `${Math.round(fps)} fps`;
+    bitrateEl.innerText = `${Math.round(mainBitrate / 1000)} kbps`;
+    fpsEl.innerText = `${Math.round(mainFps)} fps`;
+    
+    const audioEl = document.getElementById('audio-level');
+    if (audioEl) audioEl.innerText = `🎤 ${audioBytesTotal}`;
 
     let batteryLvl = null;
     if ('getBattery' in navigator) {
@@ -426,8 +502,8 @@ function startTelemetry() {
 
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(createEnvelope('telemetry', camId, 'server', { 
-        bitrate, 
-        fps: Math.round(fps), 
+        bitrate: mainBitrate, 
+        fps: Math.round(mainFps), 
         battery: batteryLvl 
       })));
     }

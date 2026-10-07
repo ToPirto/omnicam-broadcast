@@ -33,7 +33,12 @@ export class ObsBridge {
     if (exists) {
       await this.obs.call('SetInputSettings', {
         inputName: name,
-        inputSettings: { url: url }
+        inputSettings: { 
+          url: url,
+          width: 1920,
+          height: 1080,
+          reroute_audio: true
+        }
       });
     } else {
       await this.obs.call('CreateInput', {

@@ -11,14 +11,14 @@
 ## 🔄 In Progress
 - Phase 4: Adaptive quality & telemetry
   - VERIFIED: E2E test proves frames reach viewer even across landscape orientation changes.
-  - VERIFIED: Telemetry correctly tracks bitrate and frames.
+  - VERIFIED: Telemetry correctly tracks bitrate and frames per peer, and main numbers reflect OBS.
   - VERIFIED: E2E test validates HTTP 127.0.0.1 `/view` to bypass OBS CEF HTTPS rejection.
-  - VERIFIED: Quality presets apply correctly via dropdown and cap dashboard viewers to save bandwidth.
+  - VERIFIED: Quality presets apply correctly via dropdown and cap dashboard viewers to save bandwidth. SDP munging applies min, start, max bitrates.
   - VERIFIED: Disconnect logic properly cleans up state and stops auto-reconnecting on both client and dashboard.
+  - VERIFIED: Audio track connects to OBS (unmuted), supports mute/unmute, and toggles for echo/noise/agc.
 
 ## 🐛 Known Bugs
-- None known. (Fixed OBS black screen via HTTP server on localhost, poor quality via parameter constraints, and lack of disconnection controls).
+- None known.
 
 ## 📋 Next Steps
-- Polish Phase 4 and move to Phase 5: Remote control & talkback
-- Phase 5: Remote control & talkback
+- Move to Phase 5: Remote control & talkback

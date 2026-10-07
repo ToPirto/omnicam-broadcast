@@ -105,7 +105,7 @@ async function handleWebRTCOffer(msg) {
   
   if (pcInfo && pcInfo.pc) pcInfo.pc.close();
   
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  const pc = new RTCPeerConnection({ iceServers: [] });
   pcInfo = { pc, iceQueue: [], viewerId };
   webrtcs.set(camId, pcInfo);
 
