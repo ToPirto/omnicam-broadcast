@@ -314,6 +314,15 @@ function startConnection() {
       if (state === 2) border.classList.add('tally-red');
       else if (state === 1) border.classList.add('tally-green');
       else border.classList.add('tally-grey');
+    } else if (msg.type === 'viewer_disconnect') {
+      const vid = msg.sender;
+      if (peers.has(vid)) {
+        peers.get(vid).close();
+        peers.delete(vid);
+        peerStats.delete(vid);
+        if (peerAdaptive) peerAdaptive.delete(vid);
+        console.log(`Viewer ${vid} disconnected gracefully`);
+      }
     } else if (msg.type === 'disconnect') {
       console.log('Received disconnect command from dashboard');
       if (typeof btnDisconnect !== 'undefined' && btnDisconnect.onclick) {
@@ -357,26 +366,30 @@ function checkGlobalStatus() {
   }
 }
 
-function applyQualityParameters(pc, viewerId) {
+function applyQualityParameters(pc, viewerId, adaptiveSettings = null) {
   const isDashboard = viewerId && viewerId.startsWith('dash-');
-  const settings = getTargetVideoSettings(qualityPreset.value);
+  let settings = getTargetVideoSettings(qualityPreset.value);
+  if (adaptiveSettings && !isDashboard) {
+    settings = adaptiveSettings;
+  }
   
   pc.getSenders().forEach(sender => {
     if (sender.track && sender.track.kind === 'video') {
+      sender.track.contentHint = 'motion';
       const params = sender.getParameters();
       if (!params.encodings) params.encodings = [{}];
       
       params.degradationPreference = 'maintain-resolution';
       
       if (isDashboard) {
-        // Capped for dashboard preview
         params.encodings[0].maxBitrate = 500000;
+        params.encodings[0].minBitrate = 50000;
         params.encodings[0].scaleResolutionDownBy = 4;
         params.encodings[0].maxFramerate = 15;
       } else {
-        // High quality for OBS
         params.encodings[0].maxBitrate = settings.bitrate;
-        params.encodings[0].scaleResolutionDownBy = 1;
+        params.encodings[0].minBitrate = settings.bitrate * 0.1;
+        params.encodings[0].scaleResolutionDownBy = settings.scaleDown || 1;
         params.encodings[0].maxFramerate = settings.fps;
       }
       
@@ -412,7 +425,9 @@ async function createAndSendOffer(viewerId) {
 
   pc.onconnectionstatechange = () => {
     console.log(`RTC connection state [${viewerId}]:`, pc.connectionState);
-    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+    if (pc.connectionState === 'connected') {
+      applyQualityParameters(pc, viewerId);
+    } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
       closePeer(viewerId);
     }
     checkGlobalStatus();
@@ -432,6 +447,58 @@ async function createAndSendOffer(viewerId) {
   await pc.setLocalDescription(offer);
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(createEnvelope('offer', camId, viewerId, { sdp: pc.localDescription })));
+  }
+}
+
+export class AdaptiveQuality {
+  constructor(targetSettings, getNow = null) {
+    this.target = targetSettings;
+    this.step = 0; // 0=normal, 1=lower bitrate, 2=lower fps, 3=lower res
+    this.badSince = null;
+    this.getNow = getNow || (() => (typeof performance !== 'undefined') ? performance.now() : Date.now());
+    this.goodSince = this.getNow();
+  }
+
+  update(qlr, currentKbps) {
+    const now = this.getNow();
+    const targetKbps = this.target.bitrate / 1000;
+    const isBad = qlr === 'bandwidth' || qlr === 'cpu' || (currentKbps > 0 && currentKbps < targetKbps * 0.4);
+
+    if (isBad) {
+      this.goodSince = null;
+      if (!this.badSince) this.badSince = now;
+      else if (now - this.badSince >= 10000) {
+        if (this.step < 3) {
+          this.step++;
+          this.badSince = null;
+          this.goodSince = now;
+          return true;
+        }
+      }
+    } else {
+      this.badSince = null;
+      if (!this.goodSince) this.goodSince = now;
+      else if (now - this.goodSince >= 30000) {
+        if (this.step > 0) {
+          this.step--;
+          this.goodSince = now;
+          this.badSince = null;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  getCurrentSettings() {
+    let { bitrate, fps } = this.target;
+    let scaleDown = 1;
+
+    if (this.step >= 1) bitrate = Math.max(bitrate * 0.5, 500000);
+    if (this.step >= 2) fps = Math.max(Math.floor(fps / 2), 15);
+    if (this.step >= 3) scaleDown = 2;
+
+    return { bitrate, fps, scaleDown, step: this.step };
   }
 }
 
@@ -465,11 +532,13 @@ export function calculatePeerTelemetry(currentStats, lastStats, maxFps) {
 }
 
 let peerStats = new Map();
+let peerAdaptive = new Map();
 let lastTime = 0;
 
 function startTelemetry() {
   if (telemetryInterval) return;
   peerStats.clear();
+  peerAdaptive.clear();
   lastTime = 0;
   let diagCounter = 0;
   telemetryInterval = setInterval(async () => {
@@ -538,11 +607,30 @@ function startTelemetry() {
             `QLR: ${qlr} | Jitter: ${jitter} | Loss: ${pl} | RTT: ${rtt}\n\n`;
         }
 
+        let adaptiveStep = 0;
+        if (!id.startsWith('dash-')) {
+          if (!peerAdaptive.has(id)) {
+            peerAdaptive.set(id, new AdaptiveQuality(settings));
+          }
+          const adaptive = peerAdaptive.get(id);
+          adaptive.target = settings; // Keep target updated
+          const mkbps = Math.round(result.bitrate / 1000);
+          if (adaptive.update(qlr, mkbps)) {
+            applyQualityParameters(pc, id, adaptive.getCurrentSettings());
+          }
+          adaptiveStep = adaptive.step;
+        }
+
         if (id.startsWith('viewer-')) {
           if (result.hasTwoSamples) {
             mainBitrate = result.bitrate;
             mainFps = result.fps;
             mainValid = true;
+          }
+          if (adaptiveStep > 0) {
+            document.getElementById('status').innerText = `● WebRTC Terhubung (Live) [Drop: ${['', 'Bitrate', 'FPS', 'Resolusi'][adaptiveStep]}]`;
+          } else {
+            document.getElementById('status').innerText = `● WebRTC Terhubung (Live)`;
           }
         } else if (!mainValid && activePeers === 1 && result.hasTwoSamples) {
           mainBitrate = result.bitrate;

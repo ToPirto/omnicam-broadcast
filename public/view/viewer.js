@@ -77,7 +77,11 @@ function connect() {
       };
       
       await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
-      const answer = await pc.createAnswer();
+      let answer = await pc.createAnswer();
+      const maxKbps = 10000;
+      const minKbps = 1000;
+      const startKbps = 3000;
+      answer.sdp = answer.sdp.replace(/(a=fmtp:\d+ .*)/g, `$1;x-google-max-bitrate=${maxKbps};x-google-min-bitrate=${minKbps};x-google-start-bitrate=${startKbps}`);
       await pc.setLocalDescription(answer);
       
       ws.send(JSON.stringify(createEnvelope('answer', viewerId, msg.from, { sdp: pc.localDescription })));

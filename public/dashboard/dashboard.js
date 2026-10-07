@@ -144,7 +144,11 @@ async function handleWebRTCOffer(msg) {
   };
   
   await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.sdp));
-  const answer = await pc.createAnswer();
+  let answer = await pc.createAnswer();
+  const maxKbps = 500;
+  const minKbps = 50;
+  const startKbps = 250;
+  answer.sdp = answer.sdp.replace(/(a=fmtp:\d+ .*)/g, `$1;x-google-max-bitrate=${maxKbps};x-google-min-bitrate=${minKbps};x-google-start-bitrate=${startKbps}`);
   
   await pc.setLocalDescription(answer);
   if (ws.readyState === WebSocket.OPEN) {
@@ -191,9 +195,12 @@ async function patchCamera(id, data) {
         <span id="name-${id}"></span>
         <button id="btn-rename-${id}" style="background: transparent; border: none; font-size: 0.8em; cursor: pointer;" title="Ubah Nama">✏️</button>
       </h3>
-      <p>● Terhubung <span id="tally-${id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: #555; color: #fff;">OFF</span></p>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <p style="margin:0;">● Terhubung <span id="tally-${id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: #555; color: #fff;">OFF</span></p>
+        <label style="font-size: 0.8em; cursor: pointer; color: #aaa;"><input type="checkbox" id="chk-preview-${id}"> Preview</label>
+      </div>
       
-      <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; margin-bottom: 10px; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+      <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; margin-bottom: 10px; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center; display: none;">
          <div id="preview-placeholder-${id}" style="color: #888;">Menunggu video...</div>
          <video id="preview-vid-${id}" muted autoplay playsinline style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
       </div>
@@ -252,11 +259,54 @@ async function patchCamera(id, data) {
       }
     };
 
-    // Request a WebRTC connection for preview
-    const viewerId = 'dash-' + Math.random().toString(36).substring(2, 10);
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId: id })));
-    }
+    let viewerId = null;
+    let isPreviewing = false;
+
+    const togglePreview = (enable) => {
+      if (enable && !isPreviewing) {
+        viewerId = 'dash-' + Math.random().toString(36).substring(2, 10);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId: id })));
+        }
+        document.getElementById(`preview-container-${id}`).style.display = 'flex';
+        isPreviewing = true;
+      } else if (!enable && isPreviewing) {
+        document.getElementById(`preview-container-${id}`).style.display = 'none';
+        if (viewerId) {
+          if (webrtcs.has(id)) {
+            webrtcs.get(id).pc.close();
+            webrtcs.delete(id);
+          }
+          // Optional: we can send viewer_disconnect so sender cleans up immediately
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(createEnvelope('viewer_disconnect', viewerId, id)));
+          }
+        }
+        viewerId = null;
+        isPreviewing = false;
+      }
+    };
+
+    const chkPreview = document.getElementById(`chk-preview-${id}`);
+    chkPreview.onchange = (e) => {
+      togglePreview(e.target.checked);
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        if (isPreviewing) {
+          togglePreview(false);
+          chkPreview.dataset.wasChecked = 'true';
+        }
+      } else if (document.visibilityState === 'visible') {
+        if (chkPreview.dataset.wasChecked === 'true') {
+          chkPreview.checked = true;
+          togglePreview(true);
+          delete chkPreview.dataset.wasChecked;
+        }
+      }
+    });
+
   }
 
   updateCameraUI(id, data);

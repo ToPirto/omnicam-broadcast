@@ -80,3 +80,56 @@ describe('calculatePeerTelemetry', () => {
     expect(p2_t3.bitrate).toBe(8000);
   });
 });
+
+import { AdaptiveQuality } from '../public/cam/sender.js';
+
+describe('AdaptiveQuality State Machine', () => {
+  it('steps down bitrate, then fps, then resolution, and recovers', () => {
+    const target = { bitrate: 5000000, fps: 30 };
+    let currentTime = 1000;
+    const aq = new AdaptiveQuality(target, () => currentTime);
+    expect(aq.step).toBe(0);
+
+    // Initial bad conditions
+    aq.update('bandwidth', 1000);
+
+    // Simulate 10s passing with ticks
+    for (let i=0; i<11; i++) {
+      currentTime += 1000;
+      aq.update('bandwidth', 1000);
+    }
+    expect(aq.step).toBe(1);
+    
+    let s = aq.getCurrentSettings();
+    expect(s.bitrate).toBe(2500000);
+    expect(s.fps).toBe(30);
+    expect(s.scaleDown).toBe(1);
+
+    // Wait 10s more in bad state
+    for (let i=0; i<11; i++) {
+      currentTime += 1000;
+      aq.update('cpu', 500);
+    }
+    expect(aq.step).toBe(2);
+    
+    s = aq.getCurrentSettings();
+    expect(s.fps).toBe(15);
+    
+    // Wait 10s more
+    for (let i=0; i<11; i++) {
+      currentTime += 1000;
+      aq.update('none', 100);
+    }
+    expect(aq.step).toBe(3);
+    
+    s = aq.getCurrentSettings();
+    expect(s.scaleDown).toBe(2);
+    
+    // Recover after 30s
+    for (let i=0; i<31; i++) {
+      currentTime += 1000;
+      aq.update('none', 5000);
+    }
+    expect(aq.step).toBe(2);
+  });
+});

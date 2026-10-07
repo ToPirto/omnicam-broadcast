@@ -125,6 +125,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
 
     // ── 6. Wait for telemetry ≥ 10 s on dashboard ───────────────────
     console.log('Waiting for telemetry to flow for >= 10 s...');
+    await dashboard.click(`#chk-preview-${globalCamId}`);
     const telemetryStart = Date.now();
 
     // First, wait until telemetry UI shows fps data at all
@@ -150,6 +151,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
 
     // ── 7. Assert dashboard preview: srcObject, videoWidth, currentTime ──
     console.log('Asserting dashboard preview video...');
+
     const dashPreview = await dashboard.evaluate(async (id) => {
       const vid = document.getElementById(`preview-vid-${id}`);
       if (!vid) return { error: 'element missing' };
@@ -198,14 +200,16 @@ const BASE = `https://${LAN_IP}:${PORT}`;
       const v = document.getElementById('video');
       let framesDecoded = 0;
       let audioBytesReceived = 0;
+      let videoBytesReceived = 0;
+      let timestamp = performance.now();
       if (window.pc) {
         const stats = await window.pc.getStats();
         stats.forEach((r) => {
-          if (r.type === 'inbound-rtp' && r.kind === 'video') framesDecoded = r.framesDecoded;
+          if (r.type === 'inbound-rtp' && r.kind === 'video') { framesDecoded = r.framesDecoded; videoBytesReceived = r.bytesReceived; timestamp = r.timestamp || timestamp; }
           if (r.type === 'inbound-rtp' && r.kind === 'audio') audioBytesReceived = r.bytesReceived;
         });
       }
-      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded, audioBytesReceived };
+      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded, audioBytesReceived, videoBytesReceived, timestamp };
     });
 
     await new Promise((r) => setTimeout(r, 2000));
@@ -215,18 +219,26 @@ const BASE = `https://${LAN_IP}:${PORT}`;
       const v = document.getElementById('video');
       let framesDecoded = 0;
       let audioBytesReceived = 0;
+      let videoBytesReceived = 0;
+      let timestamp = performance.now();
       if (window.pc) {
         const stats = await window.pc.getStats();
         stats.forEach((r) => {
-          if (r.type === 'inbound-rtp' && r.kind === 'video') framesDecoded = r.framesDecoded;
+          if (r.type === 'inbound-rtp' && r.kind === 'video') { framesDecoded = r.framesDecoded; videoBytesReceived = r.bytesReceived; timestamp = r.timestamp || timestamp; }
           if (r.type === 'inbound-rtp' && r.kind === 'audio') audioBytesReceived = r.bytesReceived;
         });
       }
-      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded, audioBytesReceived };
+      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded, audioBytesReceived, videoBytesReceived, timestamp };
     });
 
     console.log('/view Sample 1:', s1);
     console.log('/view Sample 2:', s2);
+    
+    if (s2.timestamp > s1.timestamp) {
+      const dt = (s2.timestamp - s1.timestamp) / 1000;
+      const kbps = Math.round((s2.videoBytesReceived - s1.videoBytesReceived) * 8 / dt / 1000);
+      console.log(`\n>>> ACHIEVED VIDEO BITRATE: ${kbps} kbps <<<\n`);
+    }
 
     assert(s1.srcObject === true, '/view srcObject must not be null');
     assert(s1.width > 0, '/view videoWidth must be > 0');
