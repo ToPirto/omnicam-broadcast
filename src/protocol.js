@@ -6,7 +6,7 @@ const VALID_TYPES = [
   'offer', 'answer', 'ice',
   'tally', 'telemetry',
   'control', 'control_ack', 'control_nack',
-  'ping', 'pong', 'bye',
+  'ping', 'pong', 'bye', 'disconnect',
   'cam_join', 'cam_leave', 'dashboard_join', 'obs_status', 'viewer_join'
 ];
 

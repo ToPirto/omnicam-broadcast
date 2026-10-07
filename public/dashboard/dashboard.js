@@ -198,9 +198,10 @@ async function patchCamera(id, data) {
       <div id="telemetry-${id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">
         Menunggu data...
       </div>
-      <a href="/view/index.html?camId=${id}" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
+      <a href="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
       <br><br>
       <button class="btn-add-obs" id="btn-obs-${id}" style="background: #28a745; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
+      <button id="btn-disconnect-${id}" style="background: #dc3545; color: white; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px;">Putuskan</button>
       <div style="font-size: 0.8em; color: #666;">ID: ${id}</div>
     `;
     
@@ -223,6 +224,14 @@ async function patchCamera(id, data) {
         alert('Gagal: ' + resData.error);
         e.target.textContent = '+ Tambah Otomatis ke OBS';
         e.target.disabled = false;
+      }
+    };
+
+    document.getElementById(`btn-disconnect-${id}`).onclick = () => {
+      if (confirm('Putuskan kamera ini?')) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(createEnvelope('disconnect', 'dashboard', id)));
+        }
       }
     };
 

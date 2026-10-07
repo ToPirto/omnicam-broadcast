@@ -15,6 +15,7 @@
   <div class="hud">
     <div id="status">● Menunggu koneksi...</div>
     <div id="telemetry">
+      <span id="resolution">0x0</span> | 
       <span id="bitrate">0 kbps</span> | 
       <span id="fps">0 fps</span> | 
       <span id="battery">🔋 --</span>
@@ -22,6 +23,12 @@
     <div class="controls">
       <button id="btn-start">Mulai Kamera</button>
       <select id="cam-select"></select>
+      <select id="quality-preset">
+        <option value="720p30_2500">720p30 (2500 kbps)</option>
+        <option value="1080p30_5000" selected>1080p30 (5000 kbps)</option>
+        <option value="1080p60_8000">1080p60 (8000 kbps)</option>
+      </select>
+      <button id="btn-disconnect" style="display:none; background: #dc3545; color: white;">Putus</button>
     </div>
   </div>
 

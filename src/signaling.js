@@ -2,23 +2,15 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { createEnvelope, validateEnvelope } from './protocol.js';
 
 export class SignalingServer {
-  constructor(wss, registry, config) {
-    this.wss = wss;
+  constructor(registry, config) {
     this.registry = registry;
     this.config = config;
     this.pendingTokens = new Map(); // token -> { expiresAt }
+    this.clients = new Set();
     
-    this.wss.on('connection', (ws) => {
-      ws.isAlive = true;
-      ws.on('pong', () => { ws.isAlive = true; });
-      
-      ws.on('message', (message) => this.handleMessage(ws, message));
-      ws.on('close', () => this.handleClose(ws));
-    });
-
     this.pingInterval = setInterval(() => {
       const now = Date.now();
-      this.wss.clients.forEach((ws) => {
+      this.clients.forEach((ws) => {
         if (!ws.isAlive || (ws.lastPing && now - ws.lastPing > 15000)) {
           return ws.terminate();
         }
@@ -27,6 +19,20 @@ export class SignalingServer {
         ws.ping();
       });
     }, 5000);
+  }
+
+  addWss(wss) {
+    wss.on('connection', (ws) => {
+      this.clients.add(ws);
+      ws.isAlive = true;
+      ws.on('pong', () => { ws.isAlive = true; });
+      
+      ws.on('message', (message) => this.handleMessage(ws, message));
+      ws.on('close', () => {
+        this.clients.delete(ws);
+        this.handleClose(ws);
+      });
+    });
   }
   
   createPairingToken() {
@@ -81,6 +87,28 @@ export class SignalingServer {
         ws.isDashboard = true;
         // Send snapshot (we can just let the dashboard fetch it, or send it here)
         // Actually, dashboard.js uses fetch('/api/cameras') when it connects (loadCamerasSnapshot)!
+        break;
+      case 'disconnect':
+        // Dashboard kicking a camera, or camera disconnecting itself
+        if (msg.to && msg.to.startsWith('cam-')) {
+           const cam = this.registry.getCamera(msg.to);
+           if (cam) {
+             if (cam.ws && cam.ws.readyState === 1) {
+               cam.ws.send(JSON.stringify(createEnvelope('disconnect', 'server', msg.to)));
+               setTimeout(() => cam.ws.terminate(), 500);
+             }
+             this.registry.unregister(msg.to);
+             this.broadcastToDashboards(createEnvelope('cam_leave', 'server', 'dashboard', { camId: msg.to }));
+           }
+        } else if (msg.from && msg.from.startsWith('cam-')) {
+           // Camera disconnecting itself
+           const cam = this.registry.getCamera(msg.from);
+           if (cam) {
+             this.registry.unregister(msg.from);
+             this.broadcastToDashboards(createEnvelope('cam_leave', 'server', 'dashboard', { camId: msg.from }));
+             if (ws.readyState === 1) ws.terminate();
+           }
+        }
         break;
     }
   }
@@ -179,7 +207,7 @@ export class SignalingServer {
 
   broadcastToDashboards(msg) {
     const msgStr = JSON.stringify(msg);
-    this.wss.clients.forEach(c => {
+    this.clients.forEach(c => {
       if (c.isDashboard && c.readyState === 1) {
         c.send(msgStr);
       }

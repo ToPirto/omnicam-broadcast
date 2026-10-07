@@ -1,35 +1,37 @@
 import { createEnvelope } from '../shared/protocol.js';
 
-const urlParams = new URLSearchParams(window.location.search);
-const token = urlParams.get('token');
+const isNode = typeof window === 'undefined';
+
+const urlParams = isNode ? null : new URLSearchParams(window.location.search);
+const token = isNode ? null : urlParams.get('token');
 
 let ws;
-let camId = sessionStorage.getItem('omnicam_id') || 'new-cam';
-let sessionToken = sessionStorage.getItem('omnicam_session');
+let camId = (isNode ? null : sessionStorage.getItem('omnicam_id')) || 'new-cam';
+let sessionToken = isNode ? null : sessionStorage.getItem('omnicam_session');
 let localStream;
 let wakeLock = null;
 let currentDeviceId = null;
 let reconnectAttempts = 0;
 let telemetryInterval = null;
+let intentionalDisconnect = false;
 
 let peers = new Map(); // viewerId -> RTCPeerConnection
 
-const statusEl = document.getElementById('status');
-const preview = document.getElementById('preview');
-const btnStart = document.getElementById('btn-start');
-const batteryEl = document.getElementById('battery');
-const bitrateEl = document.getElementById('bitrate');
-const fpsEl = document.getElementById('fps');
-const camSelect = document.getElementById('cam-select');
-const btnFullscreen = document.createElement('button');
-
-btnFullscreen.id = 'btn-fullscreen';
-btnFullscreen.innerText = 'Layar penuh + kunci landscape';
-document.querySelector('.controls').appendChild(btnFullscreen);
+const statusEl = isNode ? null : document.getElementById('status');
+const preview = isNode ? null : document.getElementById('preview');
+const btnStart = isNode ? null : document.getElementById('btn-start');
+const batteryEl = isNode ? null : document.getElementById('battery');
+const bitrateEl = isNode ? null : document.getElementById('bitrate');
+const fpsEl = isNode ? null : document.getElementById('fps');
+const resolutionEl = isNode ? null : document.getElementById('resolution');
+const qualityPreset = isNode ? null : document.getElementById('quality-preset');
+const btnDisconnect = isNode ? null : document.getElementById('btn-disconnect');
+const camSelect = isNode ? null : document.getElementById('cam-select');
+const btnFullscreen = isNode ? null : document.createElement('button');
 
 async function requestWakeLock() {
   try {
-    if ('wakeLock' in navigator) {
+    if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
       wakeLock = await navigator.wakeLock.request('screen');
     }
   } catch (err) {
@@ -37,22 +39,35 @@ async function requestWakeLock() {
   }
 }
 
-document.addEventListener('visibilitychange', async () => {
-  if (wakeLock !== null && document.visibilityState === 'visible') {
-    await requestWakeLock();
-  }
-});
+if (!isNode) {
+  btnFullscreen.id = 'btn-fullscreen';
+  btnFullscreen.innerText = 'Layar penuh + kunci landscape';
+  document.querySelector('.controls').appendChild(btnFullscreen);
+
+  document.addEventListener('visibilitychange', async () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+      await requestWakeLock();
+    }
+  });
+}
+
+export function getTargetVideoSettings(val) {
+  if (val === '720p30_2500') return { width: 1280, height: 720, fps: 30, bitrate: 2500000 };
+  if (val === '1080p60_8000') return { width: 1920, height: 1080, fps: 60, bitrate: 8000000 };
+  return { width: 1920, height: 1080, fps: 30, bitrate: 5000000 };
+}
 
 async function startCamera(deviceId = null) {
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
   }
 
+  const settings = getTargetVideoSettings(qualityPreset.value);
   const constraints = {
     video: {
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      frameRate: { ideal: 30 }
+      width: { ideal: settings.width },
+      height: { ideal: settings.height },
+      frameRate: { ideal: settings.fps }
     },
     audio: { echoCancellation: true, noiseSuppression: true }
   };
@@ -67,12 +82,19 @@ async function startCamera(deviceId = null) {
     localStream = await navigator.mediaDevices.getUserMedia(constraints);
     preview.srcObject = localStream;
     preview.style.transform = 'none';
+    
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.contentHint = 'motion';
+      const s = videoTrack.getSettings();
+      resolutionEl.innerText = `${s.width || 0}x${s.height || 0}`;
+    }
 
     peers.forEach(pc => {
-      const videoTrack = localStream.getVideoTracks()[0];
       const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender) {
+      if (sender && videoTrack) {
         sender.replaceTrack(videoTrack).catch(e => console.warn(e));
+        // Apply parameters if needed here
       }
     });
   } catch (err) {
@@ -93,60 +115,104 @@ async function populateCameras() {
     camSelect.appendChild(opt);
   });
   if (videoDevices.length > 0 && !currentDeviceId) {
-    currentDeviceId = videoDevices[0].deviceId;
+    // Prefer back camera by default
+    const backCam = videoDevices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('belakang'));
+    currentDeviceId = backCam ? backCam.deviceId : videoDevices[0].deviceId;
+    camSelect.value = currentDeviceId;
   }
 }
 
-camSelect.onchange = async () => {
-  currentDeviceId = camSelect.value;
-  await startCamera(currentDeviceId);
-};
+if (!isNode) {
+  camSelect.onchange = async () => {
+    currentDeviceId = camSelect.value;
+    await startCamera(currentDeviceId);
+  };
 
-btnFullscreen.onclick = async () => {
-  try {
-    if (!document.fullscreenElement) {
-      await document.documentElement.requestFullscreen();
+  qualityPreset.onchange = async () => {
+    await startCamera(currentDeviceId);
+    // Re-apply bitrates to all peers
+    for (const [viewerId, pc] of peers.entries()) {
+      applyQualityParameters(pc, viewerId);
     }
-    if (screen.orientation && screen.orientation.lock) {
-      await screen.orientation.lock('landscape');
-    }
-  } catch (err) {
-    console.error(err);
-    alert('Gagal mengunci landscape. Aktifkan Putar Otomatis di HP dan putar HP Anda secara manual.');
-  }
-};
+  };
 
-window.addEventListener('orientationchange', async () => {
-  if (localStream) {
-    const isLandscape = window.matchMedia("(orientation: landscape)").matches;
-    const constraints = {
-      width: { ideal: isLandscape ? 1920 : 1080 },
-      height: { ideal: isLandscape ? 1080 : 1920 }
-    };
-    const videoTrack = localStream.getVideoTracks()[0];
+  btnFullscreen.onclick = async () => {
     try {
-      await videoTrack.applyConstraints(constraints);
-    } catch(e) {
-      console.warn('applyConstraints failed', e);
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengunci landscape. Aktifkan Putar Otomatis di HP dan putar HP Anda secara manual.');
     }
-  }
-});
+  };
 
-btnStart.onclick = async () => {
-  await requestWakeLock();
-  await startCamera();
-  await populateCameras();
+  window.addEventListener('orientationchange', async () => {
+    if (localStream) {
+      const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+      const settings = getTargetVideoSettings(qualityPreset.value);
+      const constraints = {
+        width: { ideal: isLandscape ? settings.width : settings.height },
+        height: { ideal: isLandscape ? settings.height : settings.width }
+      };
+      const videoTrack = localStream.getVideoTracks()[0];
+      try {
+        if (videoTrack) {
+          await videoTrack.applyConstraints(constraints);
+          const s = videoTrack.getSettings();
+          resolutionEl.innerText = `${s.width || 0}x${s.height || 0}`;
+        }
+      } catch(e) {
+        console.warn('applyConstraints failed', e);
+      }
+    }
+  });
 
-  startConnection();
-  btnStart.style.display = 'none';
-  
-  if ('getBattery' in navigator) {
-    const battery = await navigator.getBattery();
-    const updateBat = () => { batteryEl.innerText = `🔋 ${Math.round(battery.level * 100)}%`; };
-    updateBat();
-    battery.addEventListener('levelchange', updateBat);
-  }
-};
+  btnStart.onclick = async () => {
+    await requestWakeLock();
+    await populateCameras();
+    await startCamera(currentDeviceId);
+
+    startConnection();
+    btnStart.style.display = 'none';
+    btnDisconnect.style.display = 'inline-block';
+    
+    if ('getBattery' in navigator) {
+      const battery = await navigator.getBattery();
+      const updateBat = () => { batteryEl.innerText = `🔋 ${Math.round(battery.level * 100)}%`; };
+      updateBat();
+      battery.addEventListener('levelchange', updateBat);
+    }
+  };
+
+  btnDisconnect.onclick = () => {
+    intentionalDisconnect = true;
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+    }
+    peers.forEach(pc => pc.close());
+    peers.clear();
+    if (ws) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(createEnvelope('disconnect', camId, 'server')));
+      }
+      ws.close();
+    }
+    sessionStorage.removeItem('omnicam_session');
+    sessionStorage.removeItem('omnicam_id');
+    
+    btnDisconnect.style.display = 'none';
+    btnStart.style.display = 'inline-block';
+    btnStart.innerText = 'Scan Ulang QR';
+    btnStart.onclick = () => window.location.href = '/';
+    
+    statusEl.innerHTML = `<span style="color: red;">Terputus. Scan QR untuk menyambung lagi</span>`;
+    stopTelemetry();
+  };
+}
 
 function startConnection() {
   const wsUrl = `wss://${window.location.host}`;
@@ -193,13 +259,22 @@ function startConnection() {
       if (state === 2) border.classList.add('tally-red');
       else if (state === 1) border.classList.add('tally-green');
       else border.classList.add('tally-grey');
+    } else if (msg.type === 'disconnect') {
+      console.log('Received disconnect command from dashboard');
+      if (typeof btnDisconnect !== 'undefined' && btnDisconnect.onclick) {
+        btnDisconnect.onclick();
+      }
     }
   };
 
   ws.onclose = () => {
     console.log('WS state: onclose');
-    statusEl.innerText = '● Terputus, menyambungkan ulang...';
     stopTelemetry();
+    if (intentionalDisconnect) {
+      console.log('Intentional disconnect, not reconnecting.');
+      return;
+    }
+    statusEl.innerText = '● Terputus, menyambungkan ulang...';
     reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
     setTimeout(startConnection, delay);
@@ -227,6 +302,34 @@ function checkGlobalStatus() {
   }
 }
 
+function applyQualityParameters(pc, viewerId) {
+  const isDashboard = viewerId && viewerId.startsWith('dash-');
+  const settings = getTargetVideoSettings(qualityPreset.value);
+  
+  pc.getSenders().forEach(sender => {
+    if (sender.track && sender.track.kind === 'video') {
+      const params = sender.getParameters();
+      if (!params.encodings) params.encodings = [{}];
+      
+      params.degradationPreference = 'maintain-resolution';
+      
+      if (isDashboard) {
+        // Capped for dashboard preview
+        params.encodings[0].maxBitrate = 500000;
+        params.encodings[0].scaleResolutionDownBy = 4;
+        params.encodings[0].maxFramerate = 15;
+      } else {
+        // High quality for OBS
+        params.encodings[0].maxBitrate = settings.bitrate;
+        params.encodings[0].scaleResolutionDownBy = 1;
+        params.encodings[0].maxFramerate = settings.fps;
+      }
+      
+      sender.setParameters(params).catch(e => console.warn('setParameters error:', e));
+    }
+  });
+}
+
 async function createAndSendOffer(viewerId) {
   closePeer(viewerId);
   const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
@@ -243,6 +346,8 @@ async function createAndSendOffer(viewerId) {
       }
     }
   });
+
+  applyQualityParameters(pc, viewerId);
 
   pc.onicecandidate = (e) => {
     if (ws.readyState === WebSocket.OPEN && e.candidate) {

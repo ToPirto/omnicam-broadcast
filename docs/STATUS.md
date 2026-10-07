@@ -12,9 +12,12 @@
 - Phase 4: Adaptive quality & telemetry
   - VERIFIED: E2E test proves frames reach viewer even across landscape orientation changes.
   - VERIFIED: Telemetry correctly tracks bitrate and frames.
+  - VERIFIED: E2E test validates HTTP 127.0.0.1 `/view` to bypass OBS CEF HTTPS rejection.
+  - VERIFIED: Quality presets apply correctly via dropdown and cap dashboard viewers to save bandwidth.
+  - VERIFIED: Disconnect logic properly cleans up state and stops auto-reconnecting on both client and dashboard.
 
 ## 🐛 Known Bugs
-(Fixed) Reconnection failed because `new-cam` was sent instead of `camId` and one-time token was expired.
+- None known. (Fixed OBS black screen via HTTP server on localhost, poor quality via parameter constraints, and lack of disconnection controls).
 
 ## 📋 Next Steps
 - Polish Phase 4 and move to Phase 5: Remote control & talkback

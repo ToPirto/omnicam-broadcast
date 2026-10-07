@@ -23,17 +23,30 @@ const viewerId = 'viewer-' + Math.random().toString(36).substring(2, 10);
 window.pc = null;
 window.video = video;
 
+let joinInterval;
+
 function connect() {
-  ws = new WebSocket(`wss://${window.location.host}`);
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${window.location.host}`);
   
   ws.onopen = () => {
-    ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId })));
+    console.log('[VIEWER] WS connected');
+    const sendJoin = () => {
+      if (!pc || (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting')) {
+        console.log('[VIEWER] Sending cam_join...');
+        ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId })));
+      }
+    };
+    sendJoin();
+    if (joinInterval) clearInterval(joinInterval);
+    joinInterval = setInterval(sendJoin, 5000);
   };
   
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
     
     if (msg.type === 'offer') {
+      console.log('[VIEWER] Received offer');
       if (pc) pc.close();
       pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       window.pc = pc;
@@ -42,9 +55,6 @@ function connect() {
       let srcObjectSet = false;
       
       pc.ontrack = (event) => {
-        // Sender uses addTransceiver (sendonly) which does not associate
-        // tracks with a stream, so event.streams is empty. Build our own.
-        // Idempotent: set srcObject exactly once per peer connection.
         if (!srcObjectSet) {
           if (event.streams && event.streams[0]) {
             video.srcObject = event.streams[0];
@@ -53,10 +63,8 @@ function connect() {
             video.srcObject = inboundStream;
           }
           srcObjectSet = true;
-          // Ignore AbortError from play() (autoplay policy); no retry loop
           video.play().catch(() => {});
         } else if (!event.streams || !event.streams[0]) {
-          // Additional tracks (audio) on the same connection — add to existing stream
           inboundStream.addTrack(event.track);
         }
       };
@@ -73,15 +81,14 @@ function connect() {
       
       ws.send(JSON.stringify(createEnvelope('answer', viewerId, msg.from, { sdp: pc.localDescription })));
       
-      // Process queued ICE candidates
       while (iceQueue.length > 0) {
         const candidate = iceQueue.shift();
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       }
 
       pc.onconnectionstatechange = () => {
+        console.log('[VIEWER STATE]', pc.connectionState);
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-          // Trigger a new offer by re-joining
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId })));
           }
@@ -100,7 +107,9 @@ function connect() {
   };
   
   ws.onclose = () => {
-    setTimeout(connect, 2000); // Auto-reconnect
+    console.log('[VIEWER] WS disconnected');
+    if (joinInterval) clearInterval(joinInterval);
+    setTimeout(connect, 2000);
   };
 }
 

@@ -178,10 +178,10 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(dashPreview.videoWidth > 0, 'dashboard preview videoWidth must be > 0');
     assert(dashPreview.t2 > dashPreview.t1, 'dashboard preview currentTime must advance');
 
-    // ── 8. Open /view page and assert: srcObject, videoWidth, currentTime ──
-    console.log('Opening /view page...');
+    // ── 8. Open /view page (OBS path) via HTTP and assert ───────────
+    console.log('Opening /view page via HTTP...');
     const viewPage = await browser.newPage();
-    await viewPage.goto(`${BASE}/view/index.html?camId=${globalCamId}`);
+    await viewPage.goto(`http://127.0.0.1:${PORT + 1}/view/index.html?camId=${globalCamId}`);
 
     // Wait for video to start playing (videoWidth > 0)
     await viewPage.waitForFunction(
@@ -229,11 +229,18 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(s2.framesDecoded > s1.framesDecoded, '/view framesDecoded must advance between two samples');
     console.log('/view WebRTC assertions passed.');
 
-    // ── 9. Close sender → dashboard shows "Kamera terputus" ─────────
-    console.log('Closing sender page...');
-    await senderPage.close();
+    // ── 9. Disconnect via Dashboard ("Putuskan") ────────────────────
+    console.log('Clicking "Putuskan" on dashboard...');
     await dashboard.bringToFront();
+    
+    // Stub confirm dialog to return true
+    await dashboard.evaluate(() => {
+      window.confirm = () => true;
+    });
 
+    await dashboard.click(`#btn-disconnect-${globalCamId}`);
+
+    // Verify Dashboard shows offline
     await dashboard.waitForFunction(
       (id) => {
         const el = document.getElementById(`preview-placeholder-${id}`);
@@ -242,7 +249,22 @@ const BASE = `https://${LAN_IP}:${PORT}`;
       { timeout: 15000 },
       globalCamId,
     );
-    console.log('Dashboard correctly showed disconnected state.');
+    console.log('Dashboard correctly showed disconnected state after Putuskan.');
+
+    // Verify Sender shows disconnected and does NOT reconnect
+    console.log('Verifying sender is disconnected and stays disconnected...');
+    await senderPage.bringToFront();
+    await senderPage.waitForFunction(() => {
+      const text = document.getElementById('status').innerText;
+      return text.includes('Terputus');
+    }, { timeout: 10000 });
+    
+    // Wait a few seconds to ensure it does not auto-reconnect
+    await new Promise((r) => setTimeout(r, 4000));
+    const senderFinalStatus = await senderPage.$eval('#status', el => el.innerText);
+    assert(senderFinalStatus.includes('Terputus'), `Sender should stay disconnected, but status is: ${senderFinalStatus}`);
+    
+    console.log('Sender disconnect logic working correctly.');
 
     // ── 10. Final ───────────────────────────────────────────────────
     assert(pageErrors.length === 0, `Dashboard had page errors: ${pageErrors.join('; ')}`);

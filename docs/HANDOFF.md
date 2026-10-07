@@ -9,6 +9,9 @@
 
 ## 5. Current State
 - The WebRTC pipeline has been end-to-end verified with E2E tests, including landscape/orientation changes and `framesDecoded` assertions.
+- OBS black screen issue fixed by introducing a secondary HTTP listener on `127.0.0.1:PORT+1` serving `/view`, allowing OBS CEF to bypass self-signed TLS restrictions.
+- Quality presets (720p30, 1080p30, 1080p60) implemented with bandwidth capping for dashboard previews to prevent degrading the OBS feed.
+- Disconnect controls ("Putus" on phone, "Putuskan" on dashboard) added to stop feeds gracefully without auto-reconnecting.
 - `npm run test:e2e` and `npm test` are both fully passing.
 - Telemetry, heartbeat, and reconnection logic are fully implemented.
 

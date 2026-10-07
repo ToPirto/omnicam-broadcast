@@ -28,10 +28,21 @@ async function start() {
     prefix: '/', 
   });
 
+  const fastifyHttp = Fastify({ logger: false });
+  fastifyHttp.register(fastifyStatic, {
+    root: path.join(__dirname, '../public'),
+    prefix: '/', 
+  });
+
   const registry = new CameraRegistry(config.maxCameras);
   
   const wss = new WebSocketServer({ server: fastify.server });
-  const signaling = new SignalingServer(wss, registry, config);
+  const wssHttp = new WebSocketServer({ server: fastifyHttp.server });
+  
+  const signaling = new SignalingServer(registry, config);
+  signaling.addWss(wss);
+  signaling.addWss(wssHttp);
+  
   const obsBridge = new ObsBridge(config, signaling);
   obsBridge.connect();
 
@@ -81,9 +92,7 @@ async function start() {
 
   fastify.post('/api/obs/add', async (request, reply) => {
     const { camId } = request.body;
-    const ips = getLocalIPs();
-    const ip = ips.length > 0 ? ips[0] : '127.0.0.1';
-    const url = `https://${ip}:${config.port}/view/index.html?camId=${camId}`;
+    const url = `http://127.0.0.1:${config.port + 1}/view/index.html?camId=${camId}`;
     try {
       const exists = await obsBridge.addBrowserSource(`Camera ${camId.substring(0, 4)}`, url);
       return { success: true, exists };
@@ -108,6 +117,7 @@ async function start() {
 
   try {
     await fastify.listen({ port: config.port, host: config.host });
+    await fastifyHttp.listen({ port: config.port + 1, host: '127.0.0.1' });
     advertiseMDNS(config.port);
     
     const ips = getLocalIPs();
@@ -115,6 +125,7 @@ async function start() {
     console.log('🎥 OmniCam Broadcast Server Started');
     console.log('=========================================');
     console.log(`Dashboard : https://localhost:${config.port}`);
+    console.log(`OBS Local : http://127.0.0.1:${config.port + 1}`);
     ips.forEach(ip => {
       console.log(`LAN Access: https://${ip}:${config.port}`);
     });
