@@ -273,6 +273,81 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     console.log('Sender muted text:', senderAudioMuted);
     assert(senderAudioMuted.includes('🔇'), 'Audio meter must show mute icon');
 
+    // ── Resilience (c): Wake Lock visibility ───────────────────────
+    console.log('Testing Wake Lock on visibility change...');
+    await senderPage.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', writable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    console.log('Wake Lock visibility test passed (no crash).');
+
+    // ── Resilience (a): Kill Sender WS ─────────────────────────────
+    console.log('Simulating Sender network drop for 10s...');
+    await senderPage.setOfflineMode(true);
+    // Wait for WS to close due to offline
+    await new Promise((r) => setTimeout(r, 5000));
+    console.log('Restoring Sender network...');
+    await senderPage.setOfflineMode(false);
+    // Wait for reconnect to complete
+    await new Promise((r) => setTimeout(r, 10000));
+    
+    // Check if view page video resumes
+    const getStatsFn = async () => {
+      const v = document.getElementById('video');
+      let framesDecoded = 0;
+      let audioBytesReceived = 0;
+      let videoBytesReceived = 0;
+      let timestamp = performance.now();
+      if (window.pc) {
+        const stats = await window.pc.getStats();
+        stats.forEach((r) => {
+          if (r.type === 'inbound-rtp' && r.kind === 'video') { framesDecoded = r.framesDecoded; videoBytesReceived = r.bytesReceived; timestamp = r.timestamp || timestamp; }
+          if (r.type === 'inbound-rtp' && r.kind === 'audio') audioBytesReceived = r.bytesReceived;
+        });
+      }
+      return { srcObject: v.srcObject !== null, width: v.videoWidth, currentTime: v.currentTime, framesDecoded, audioBytesReceived, videoBytesReceived, timestamp };
+    };
+    const viewSample3 = await viewPage.evaluate(getStatsFn);
+    await new Promise((r) => setTimeout(r, 2000));
+    const viewSample4 = await viewPage.evaluate(getStatsFn);
+    assert(viewSample4.currentTime > viewSample3.currentTime, 'View video must resume after WS reconnect');
+    console.log('Sender WebSocket reconnect resilience passed.');
+
+    // ── Resilience (b): OBS Bridge Reconnect ───────────────────────
+    console.log('Simulating OBS Bridge disconnect...');
+    await dashboard.evaluate(async (port) => {
+      await fetch(`/api/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ obsWsUrl: 'ws://invalid:4455', obsWsPassword: '' })
+      });
+    }, PORT);
+    await new Promise((r) => setTimeout(r, 2000));
+    console.log('Restoring OBS Bridge...');
+    await dashboard.evaluate(async (port) => {
+      await fetch(`/api/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ obsWsUrl: 'ws://127.0.0.1:4455', obsWsPassword: 'password' })
+      });
+    }, PORT);
+    await new Promise((r) => setTimeout(r, 3000));
+    
+    console.log('Testing Tally after OBS bridge reconnect...');
+    await dashboard.evaluate(async (camId) => {
+      await fetch(`/api/test/tally`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camId: camId, state: 2 })
+      });
+    }, globalCamId);
+    await new Promise((r) => setTimeout(r, 500));
+    const tallyColor = await senderPage.$eval('#tally-border', el => el.className);
+    assert(tallyColor.includes('tally-red'), 'Tally must be red after bridge reconnect');
+    console.log('OBS Bridge reconnect resilience passed.');
+
     // ── 9. Disconnect via Dashboard ("Putuskan") ────────────────────
     console.log('Clicking "Putuskan" on dashboard...');
     await dashboard.bringToFront();
