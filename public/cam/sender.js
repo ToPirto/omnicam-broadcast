@@ -35,6 +35,12 @@ const btnDisconnect = isNode ? null : document.getElementById('btn-disconnect');
 const camSelect = isNode ? null : document.getElementById('cam-select');
 const btnFullscreen = isNode ? null : document.createElement('button');
 
+const btnPowersave = isNode ? null : document.getElementById('btn-powersave');
+const powersaveOverlay = isNode ? null : document.getElementById('powersave-overlay');
+const powersaveTally = isNode ? null : document.getElementById('powersave-tally');
+const powersaveBattery = isNode ? null : document.getElementById('powersave-battery');
+const powersaveBitrate = isNode ? null : document.getElementById('powersave-bitrate');
+
 async function requestWakeLock() {
   try {
     if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
@@ -69,6 +75,30 @@ if (!isNode) {
     btnCloseDiag.onclick = () => {
       diagPanel.style.display = 'none';
     };
+  }
+
+  if (btnPowersave && powersaveOverlay) {
+    btnPowersave.onclick = () => {
+      powersaveOverlay.style.display = 'flex';
+      requestWakeLock(); // ensure wake lock is held
+    };
+    
+    let pressTimer;
+    powersaveOverlay.addEventListener('mousedown', startPress);
+    powersaveOverlay.addEventListener('touchstart', startPress);
+    powersaveOverlay.addEventListener('mouseup', cancelPress);
+    powersaveOverlay.addEventListener('mouseleave', cancelPress);
+    powersaveOverlay.addEventListener('touchend', cancelPress);
+    
+    function startPress(e) {
+      e.preventDefault();
+      pressTimer = window.setTimeout(() => {
+        powersaveOverlay.style.display = 'none';
+      }, 2000);
+    }
+    function cancelPress() {
+      clearTimeout(pressTimer);
+    }
   }
 }
 
@@ -256,6 +286,7 @@ if (!isNode) {
     btnStart.style.display = 'none';
     btnDisconnect.style.display = 'inline-block';
     btnMute.style.display = 'inline-block';
+    if (btnPowersave) btnPowersave.style.display = 'block';
     
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
@@ -332,10 +363,18 @@ function startConnection() {
       const state = msg.payload.state;
       console.log('Received tally state:', state);
       const border = document.getElementById('tally-border');
-      border.className = '';
-      if (state === 2) border.classList.add('tally-red');
-      else if (state === 1) border.classList.add('tally-green');
-      else border.classList.add('tally-grey');
+      if (border) {
+        border.className = '';
+        if (state === 2) border.classList.add('tally-red');
+        else if (state === 1) border.classList.add('tally-green');
+        else border.classList.add('tally-grey');
+      }
+      if (powersaveTally) {
+        powersaveTally.className = '';
+        if (state === 2) powersaveTally.classList.add('tally-red');
+        else if (state === 1) powersaveTally.classList.add('tally-green');
+        else powersaveTally.classList.add('tally-grey');
+      }
     } else if (msg.type === 'viewer_disconnect') {
       const vid = msg.sender;
       if (peers.has(vid)) {
@@ -712,6 +751,20 @@ function startTelemetry() {
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
       batteryLvl = battery.level;
+      if (powersaveBattery) powersaveBattery.innerText = `🔋 ${Math.round(battery.level * 100)}%`;
+      if (battery.level < 0.2 && !battery.charging) {
+        if (powersaveBattery) powersaveBattery.style.color = '#dc3545';
+        const battEl = document.getElementById('battery');
+        if (battEl) battEl.style.color = '#dc3545';
+      } else {
+        if (powersaveBattery) powersaveBattery.style.color = 'white';
+        const battEl = document.getElementById('battery');
+        if (battEl) battEl.style.color = '';
+      }
+    }
+    
+    if (powersaveBitrate) {
+      powersaveBitrate.innerText = mainValid ? `${Math.round(mainBitrate)} kbps` : '- kbps';
     }
 
     if (ws.readyState === WebSocket.OPEN) {
