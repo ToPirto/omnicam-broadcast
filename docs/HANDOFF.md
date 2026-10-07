@@ -1,20 +1,24 @@
 # OmniCam Broadcast - Handoff
 
 ## 4. Work Done
-- Identified and fixed signaling root cause: Reconnection was failing because the client sent `new-cam` and no session token, falling back to a consumed QR one-time token. Fixed by assigning `camId` and `sessionToken` properly and saving them to `sessionStorage`.
-- Updated sender UI: Added real camera enumeration with dropdown, orientation/landscape lock API, `1920x1080` constraints toggling on `orientationchange`, and a fallback message for auth failure.
-- Implemented per-peer telemetry tracking at 1Hz (`pc.getStats`) for both audio and video, clamping FPS to avoid outliers.
-- Improved OBS API route: Made `addBrowserSource` idempotent, applied `reroute_audio: true`, and handled `passwordSaved: true`.
-- Fixed `test-browser.js` by removing explicit `video.play()`, adding audio tests, and mocking `obsBridge.updateTally`.
-- Added SDP munging for start/min/max bitrates and Opus stereo, fixed audio routing and unmute in OBS, and added UI controls for audio options.
-- Locked landscape orientation in manifest and screen API.
+- Implemented and unit-tested dynamic OBS Browser source creation (`?obs=1`).
+- Implemented stable camera identity (`camId` persistent via `localStorage`), session token re-binding, and renaming features (`data/cameras.json`).
+- Fixed HUD telemetry bug by parsing specific peer connections (ignoring dashboard preview stats) and computing per-second deltas strictly per connection.
+- Added adaptive quality state machine that reacts to bandwidth limitations by stepping down bitrate, framerate, and resolution iteratively, recovering gradually.
+- Integrated `AnalyserNode` for a real-time RMS audio meter on the sender interface.
+- Built a battery/powersave overlay (`#powersave-overlay`) with wake-lock maintenance and battery API integration, featuring visual warnings at <20% uncharged.
+- Extended end-to-end tests to simulate network drops (via `setOfflineMode`), OBS WebSocket disconnects (via invalid config POSTs), and visibility changes for wake-lock robustness.
+- Added comprehensive `SETUP-RELAWAN.md` and `TESTING.md` guidelines in Indonesian and English respectively.
+- Cleared scratch files and updated all tests to run cleanly in isolation (`npm test` and `npm run test:e2e`).
 
 ## 5. Current State
-- The WebRTC pipeline has been end-to-end verified with E2E tests, including audio reception and telemetry calculations.
-- Quality presets implemented with SDP constraints to prevent blockiness, ensuring high-quality OBS feeds.
-- Mute/Unmute buttons, audio toggles, and audio level meters added.
-- `npm run test:e2e` and `npm test` are both fully passing.
+- `test:e2e` passes flawlessly with deep resilience testing.
+- `npm test` passes completely (fixed database pollution).
+- Telemetry, telemetry precision, and WebRTC fallback handling are robust on paper.
+- Real-world validation is still required for visual elements, real-microphone capture, physical device orientation locks, and true network drops.
 
 ## 7. Next Steps for Next Agent
+- Wait for user feedback regarding the manual hardware tests outlined in `docs/STATUS.md` and `docs/TESTING.md`.
+- Resolve any bugs reported during physical hardware validation.
 - Begin **Phase 5: Remote control & talkback**.
 - Ensure to check `STATUS.md` and read `GEMINI.md` before proceeding.
