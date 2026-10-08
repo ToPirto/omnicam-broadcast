@@ -128,7 +128,7 @@ export class SignalingServer {
       if (this.registry.verifySession(camId, sessionToken)) {
         this.registry.register(camId, ws, sessionToken); // Put it online
         ws.camId = camId;
-        ws.send(JSON.stringify(createEnvelope('auth_ok', 'server', camId, { sessionToken, camId })));
+        ws.send(JSON.stringify(createEnvelope('auth_ok', 'server', camId, { sessionToken, camId, name: this.registry.getCamera(camId)?.name })));
         
         const cam = this.registry.getCamera(camId);
         if (cam && cam.tally !== undefined) {
@@ -159,7 +159,7 @@ export class SignalingServer {
         try {
           this.registry.register(camId, ws, newSessionToken);
           ws.camId = camId;
-          ws.send(JSON.stringify(createEnvelope('auth_ok', 'server', camId, { sessionToken: newSessionToken, camId })));
+          ws.send(JSON.stringify(createEnvelope('auth_ok', 'server', camId, { sessionToken: newSessionToken, camId, name: this.registry.getCamera(camId)?.name })));
           
           // New cameras start with tally 0
           ws.send(JSON.stringify(createEnvelope('tally', 'server', camId, { state: 0 })));

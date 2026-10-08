@@ -26,10 +26,8 @@ let peers = new Map(); // viewerId -> RTCPeerConnection
 const statusEl = isNode ? null : document.getElementById('status');
 const preview = isNode ? null : document.getElementById('preview');
 const btnStart = isNode ? null : document.getElementById('btn-start');
-const batteryEl = isNode ? null : document.getElementById('battery');
-const bitrateEl = isNode ? null : document.getElementById('bitrate');
-const fpsEl = isNode ? null : document.getElementById('fps');
-const resolutionEl = isNode ? null : document.getElementById('resolution');
+const batteryLevelEl = isNode ? null : document.getElementById('battery-level');
+const batteryTextEl = isNode ? null : document.getElementById('battery-text');
 const qualityPreset = isNode ? null : document.getElementById('quality-preset');
 const btnDisconnect = isNode ? null : document.getElementById('btn-disconnect');
 const camSelect = isNode ? null : document.getElementById('cam-select');
@@ -40,6 +38,22 @@ const powersaveOverlay = isNode ? null : document.getElementById('powersave-over
 const powersaveTally = isNode ? null : document.getElementById('powersave-tally');
 const powersaveBattery = isNode ? null : document.getElementById('powersave-battery');
 const powersaveBitrate = isNode ? null : document.getElementById('powersave-bitrate');
+
+const proMenuPanel = isNode ? null : document.getElementById('pro-menu-panel');
+const btnProMenu = isNode ? null : document.getElementById('btn-pro-menu');
+const btnCloseMenu = isNode ? null : document.getElementById('btn-close-menu');
+const btnLangToggle = isNode ? null : document.getElementById('btn-lang-toggle');
+const btnGridToggle = isNode ? null : document.getElementById('btn-grid-toggle');
+const gridOverlay = isNode ? null : document.getElementById('grid-overlay');
+
+const zoomContainer = isNode ? null : document.getElementById('zoom-container');
+const zoomSlider = isNode ? null : document.getElementById('zoom-slider');
+const zoomText = isNode ? null : document.getElementById('zoom-text');
+const focusReticle = isNode ? null : document.getElementById('focus-reticle');
+const videoContainer = isNode ? null : document.getElementById('video-container');
+
+let currentLang = 'id';
+let isGridOn = false;
 
 async function requestWakeLock() {
   try {
@@ -118,6 +132,52 @@ if (!isNode) {
       clearTimeout(pressTimer);
     }
   }
+
+  // --- NEW: Pro Controls Interactions ---
+  if (btnProMenu && proMenuPanel) {
+    btnProMenu.onclick = () => {
+      proMenuPanel.style.display = proMenuPanel.style.display === 'none' ? 'flex' : 'none';
+    };
+    if (btnCloseMenu) {
+      btnCloseMenu.onclick = () => proMenuPanel.style.display = 'none';
+    }
+  }
+
+  if (btnLangToggle) {
+    btnLangToggle.onclick = () => {
+      currentLang = currentLang === 'id' ? 'en' : 'id';
+      btnLangToggle.innerText = currentLang === 'id' ? 'ID' : 'EN';
+      document.querySelectorAll('.lang-id').forEach(el => el.style.display = currentLang === 'id' ? '' : 'none');
+      document.querySelectorAll('.lang-en').forEach(el => el.style.display = currentLang === 'en' ? '' : 'none');
+      if (btnFullscreen) btnFullscreen.innerText = currentLang === 'id' ? 'Layar Penuh / Kunci Landscape' : 'Fullscreen / Lock Landscape';
+    };
+  }
+
+  if (btnGridToggle && gridOverlay) {
+    btnGridToggle.onclick = () => {
+      isGridOn = !isGridOn;
+      btnGridToggle.innerText = isGridOn ? 'ON' : 'OFF';
+      gridOverlay.style.display = isGridOn ? 'block' : 'none';
+    };
+  }
+  
+  if (videoContainer && focusReticle) {
+    let focusTimer;
+    const triggerFocus = (e) => {
+      const rect = videoContainer.getBoundingClientRect();
+      let x = e.clientX || (e.touches && e.touches[0].clientX);
+      let y = e.clientY || (e.touches && e.touches[0].clientY);
+      
+      focusReticle.style.left = (x - rect.left) + 'px';
+      focusReticle.style.top = (y - rect.top) + 'px';
+      focusReticle.style.display = 'flex';
+      
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => { focusReticle.style.display = 'none'; }, 2000);
+    };
+    videoContainer.addEventListener('mousedown', triggerFocus);
+    videoContainer.addEventListener('touchstart', triggerFocus);
+  }
 }
 
 export function getTargetVideoSettings(val) {
@@ -163,6 +223,30 @@ async function startCamera(deviceId = null) {
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.contentHint = 'motion';
+      
+      // Setup Zoom if supported
+      setTimeout(() => {
+        const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (capabilities.zoom && zoomContainer && zoomSlider) {
+          zoomContainer.style.display = 'flex';
+          zoomSlider.min = capabilities.zoom.min;
+          zoomSlider.max = capabilities.zoom.max;
+          zoomSlider.step = capabilities.zoom.step || 0.1;
+          zoomSlider.value = videoTrack.getSettings().zoom || 1;
+          
+          zoomSlider.oninput = async (e) => {
+            const val = parseFloat(e.target.value);
+            zoomText.innerText = val.toFixed(1) + 'x';
+            try {
+              await videoTrack.applyConstraints({ advanced: [{ zoom: val }] });
+            } catch (err) {
+              console.warn('Zoom failed', err);
+            }
+          };
+        } else if (zoomContainer) {
+          zoomContainer.style.display = 'none';
+        }
+      }, 500); // Wait a bit for track to initialize
     }
 
     if (typeof window !== 'undefined' && window.AudioContext) {
@@ -306,12 +390,6 @@ if (!isNode) {
     btnMute.style.display = 'inline-block';
     if (btnPowersave) btnPowersave.style.display = 'inline-block';
     
-    if ('getBattery' in navigator) {
-      const battery = await navigator.getBattery();
-      const updateBat = () => { if(batteryEl) batteryEl.innerText = `BAT: ${Math.round(battery.level * 100)}%`; };
-      updateBat();
-      battery.addEventListener('levelchange', updateBat);
-    }
   };
 
   btnDisconnect.onclick = () => {
@@ -340,7 +418,11 @@ if (!isNode) {
     btnStart.innerText = 'Scan Ulang QR';
     btnStart.onclick = () => window.location.href = '/';
     
-    statusEl.innerHTML = `<span style="color: red;">Terputus. Scan QR untuk menyambung lagi</span>`;
+    statusEl.innerHTML = `<span style="color: red;" class="lang-id">Terputus. Scan QR untuk menyambung lagi</span><span style="color: red; display:none;" class="lang-en">Disconnected. Scan QR to reconnect</span>`;
+    if (currentLang === 'en') {
+      statusEl.querySelector('.lang-id').style.display = 'none';
+      statusEl.querySelector('.lang-en').style.display = '';
+    }
     stopTelemetry();
   };
 }
@@ -352,7 +434,11 @@ function startConnection() {
   ws.onopen = () => {
     reconnectAttempts = 0;
     console.log('WS state: onopen');
-    statusEl.innerText = 'Menghubungkan (Signaling)...';
+    statusEl.innerHTML = `<span class="lang-id">Menghubungkan (Signaling)...</span><span class="lang-en" style="display:none;">Connecting (Signaling)...</span>`;
+    if (currentLang === 'en') {
+      statusEl.querySelector('.lang-id').style.display = 'none';
+      statusEl.querySelector('.lang-en').style.display = '';
+    }
     ws.send(JSON.stringify(createEnvelope('auth', camId, 'server', { token, sessionToken })));
   };
 
@@ -361,8 +447,16 @@ function startConnection() {
     
     if (msg.type === 'auth_ok') {
       console.log('WS state: auth_ok');
-      statusEl.innerText = 'Terautentikasi (Menunggu Viewer)';
+      statusEl.innerHTML = `<span class="lang-id">Terautentikasi (Menunggu Viewer)</span><span class="lang-en" style="display:none;">Authenticated (Waiting for Viewer)</span>`;
+      if (currentLang === 'en') {
+        statusEl.querySelector('.lang-id').style.display = 'none';
+        statusEl.querySelector('.lang-en').style.display = '';
+      }
       camId = msg.payload.camId;
+      if (msg.payload.name) {
+        const nameEl = document.getElementById('cam-name-display');
+        if (nameEl) nameEl.innerText = msg.payload.name;
+      }
       sessionToken = msg.payload.sessionToken;
       sessionStorage.setItem('omnicam_session', sessionToken);
       sessionStorage.setItem('omnicam_id', camId);
@@ -400,6 +494,17 @@ function startConnection() {
         else if (state === 1) powersaveTally.classList.add('tally-green');
         else powersaveTally.classList.add('tally-grey');
       }
+      const dot = document.getElementById('status-dot');
+      if (dot) {
+        dot.className = 'status-dot';
+        if (state === 2) dot.classList.add('tally-red', 'live');
+        else if (state === 1) dot.classList.add('tally-green', 'live');
+        else dot.classList.add('tally-grey');
+      }
+    } else if (msg.type === 'cam_rename') {
+      const name = msg.payload.name;
+      const nameEl = document.getElementById('cam-name-display');
+      if (nameEl) nameEl.innerText = name;
     } else if (msg.type === 'viewer_disconnect') {
       const vid = msg.sender;
       if (peers.has(vid)) {
@@ -424,7 +529,11 @@ function startConnection() {
       console.log('Intentional disconnect, not reconnecting.');
       return;
     }
-    statusEl.innerText = 'Terputus, menyambungkan ulang...';
+    statusEl.innerHTML = `<span class="lang-id">Terputus, menyambungkan ulang...</span><span class="lang-en" style="display:none;">Disconnected, reconnecting...</span>`;
+    if (currentLang === 'en') {
+      statusEl.querySelector('.lang-id').style.display = 'none';
+      statusEl.querySelector('.lang-en').style.display = '';
+    }
     reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
     setTimeout(startConnection, delay);
@@ -443,14 +552,23 @@ function checkGlobalStatus() {
   peers.forEach(pc => {
     if (pc.connectionState === 'connected') connected = true;
   });
-  const dot = isNode ? null : document.getElementById('status-dot');
   if (connected) {
-    if (statusEl) statusEl.innerText = 'WebRTC Terhubung (Live)';
-    if (dot) dot.classList.add('live');
+    if (statusEl) {
+      statusEl.innerHTML = `<span class="lang-id">WebRTC Terhubung (Live)</span><span class="lang-en" style="display:none;">WebRTC Connected (Live)</span>`;
+      if (currentLang === 'en') {
+        statusEl.querySelector('.lang-id').style.display = 'none';
+        statusEl.querySelector('.lang-en').style.display = '';
+      }
+    }
     startTelemetry();
   } else {
-    if (statusEl) statusEl.innerText = 'Terautentikasi (Menunggu Viewer)';
-    if (dot) dot.classList.remove('live');
+    if (statusEl) {
+      statusEl.innerHTML = `<span class="lang-id">Terautentikasi (Menunggu Viewer)</span><span class="lang-en" style="display:none;">Authenticated (Waiting for Viewer)</span>`;
+      if (currentLang === 'en') {
+        statusEl.querySelector('.lang-id').style.display = 'none';
+        statusEl.querySelector('.lang-en').style.display = '';
+      }
+    }
     stopTelemetry();
   }
 }
@@ -741,11 +859,17 @@ function startTelemetry() {
 
     if (activePeers === 0) return;
 
-    const telEl = document.getElementById('telemetry');
-    if (telEl) {
+    // Update modular telemetry chips
+    const chipRes = document.getElementById('chip-res');
+    const chipBitrate = document.getElementById('chip-bitrate');
+    const chipLoss = document.getElementById('chip-loss');
+    
+    if (chipRes && chipBitrate && chipLoss) {
       const mbps = mainValid ? (mainBitrate / 1000000).toFixed(1) : '0.0';
       const fpsStr = mainValid ? Math.round(mainFps) : 0;
-      telEl.innerText = `1080p${fpsStr} | ${mbps} Mbps | LOSS: 0`;
+      chipRes.innerText = `[ 1080p${fpsStr} ]`;
+      chipBitrate.innerText = `[ ${mbps} Mbps ]`;
+      chipLoss.innerText = `[ LOSS: 0 ]`; // Hardcoded loss for now based on older implementation, can be dynamic
     }
     
     let audioLvl = 0;
@@ -758,7 +882,8 @@ function startTelemetry() {
         sum += val * val;
       }
       rawRms = Math.sqrt(sum / audioData.length);
-      audioLvl = isMuted ? 0 : Math.min(Math.round(rawRms * 10 * 100), 100);
+      // High-sensitivity curve: square root to boost lower volumes
+      audioLvl = isMuted ? 0 : Math.min(Math.round(Math.pow(rawRms, 0.5) * 160), 100);
     }
     
     const audioText = document.getElementById('audio-text');
@@ -784,15 +909,26 @@ function startTelemetry() {
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
       batteryLvl = battery.level;
-      if (powersaveBattery) powersaveBattery.innerText = `BAT: ${Math.round(battery.level * 100)}%`;
-      if (battery.level < 0.2 && !battery.charging) {
-        if (powersaveBattery) powersaveBattery.style.color = '#dc3545';
-        const battEl = document.getElementById('battery');
-        if (battEl) battEl.style.color = '#dc3545';
-      } else {
-        if (powersaveBattery) powersaveBattery.style.color = 'white';
-        const battEl = document.getElementById('battery');
-        if (battEl) battEl.style.color = '';
+      const pct = Math.round(battery.level * 100);
+      
+      if (powersaveBattery) powersaveBattery.innerText = `BAT: ${pct}%`;
+      if (batteryTextEl) batteryTextEl.innerText = `${pct}%`;
+      
+      if (batteryLevelEl) {
+        batteryLevelEl.style.width = `${pct}%`;
+        batteryLevelEl.className = 'battery-level';
+        if (pct <= 20) {
+          batteryLevelEl.classList.add('red');
+          if (powersaveBattery) powersaveBattery.style.color = '#dc3545';
+          if (batteryTextEl) batteryTextEl.style.color = '#dc3545';
+        } else if (pct <= 40) {
+          batteryLevelEl.classList.add('yellow');
+          if (powersaveBattery) powersaveBattery.style.color = 'white';
+          if (batteryTextEl) batteryTextEl.style.color = 'white';
+        } else {
+          if (powersaveBattery) powersaveBattery.style.color = 'white';
+          if (batteryTextEl) batteryTextEl.style.color = 'white';
+        }
       }
     }
     

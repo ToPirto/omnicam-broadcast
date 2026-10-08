@@ -88,6 +88,10 @@ async function start() {
     registry.rename(camId, name);
     // Broadcast name change to all dashboards
     signaling.broadcastToDashboards({ type: 'cam_join', from: 'server', to: 'dashboard', payload: { camId, name } });
+    
+    // Relay to sender
+    const { createEnvelope } = await import('./protocol.js');
+    signaling.relayTo(createEnvelope('cam_rename', 'server', camId, { camId, name }));
     return { success: true };
   });
   

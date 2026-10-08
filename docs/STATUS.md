@@ -1,6 +1,6 @@
 # OmniCam Broadcast - Status Tracker
 
-## ✅ Done
+## [DONE] Done
 - Phase 1: Environment + Docs + Architecture
 - Phase 2: Core Server + WebRTC + Dashboard
 - Phase 3: OBS WebSocket bridge & Tally
@@ -28,7 +28,7 @@
 - **[NOT VERIFIED]** Renaming camera persists across reloads and displays correctly on physical dashboard monitor.
 - **[NOT VERIFIED]** Real-world Wi-Fi drops on phone successfully trigger WebRTC reconnections seamlessly.
 
-## 📋 Next Steps
+## [TODO] Next Steps
 - User to manually test the **[NOT VERIFIED]** hardware items using real phones (Android/iOS) and a live OBS instance.
 - Report results and fix any discrepancies.
 - Move to Phase 5: Remote control & talkback

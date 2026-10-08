@@ -260,17 +260,26 @@ async function patchCamera(id, data) {
     };
 
     document.getElementById(`btn-delete-${id}`).onclick = async () => {
+      console.log('Delete button clicked for id:', id);
       if (confirm('Hapus kamera ini?')) {
+        console.log('Confirmed delete');
         try {
           const res = await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
+          console.log('Delete API response status:', res.status);
           if (res.ok) {
+            console.log('Remove camera from DOM');
             removeCamera(id);
           } else {
+            const body = await res.text();
+            console.error('Failed to delete:', body);
             alert('Gagal menghapus kamera');
           }
         } catch (e) {
+          console.error('Delete fetch exception:', e);
           alert('Gagal menghapus kamera');
         }
+      } else {
+        console.log('Delete cancelled');
       }
     };
 
