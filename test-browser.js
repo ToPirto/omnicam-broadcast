@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { networkInterfaces } from 'node:os';
 import http from 'node:https';
 
-// ── Helpers ─────────────────────────────────────────────────────────
+// -- Helpers ---------------------------------------------------------
 // Reuse the same skip-patterns as src/network.js for LAN IP detection
 const SKIP_PATTERNS = [
   /^vEthernet/i, /^VMware/i, /^VirtualBox/i,
@@ -49,13 +49,13 @@ function assert(condition, message) {
   if (!condition) throw new Error(`ASSERTION FAILED: ${message}`);
 }
 
-// ── Main ────────────────────────────────────────────────────────────
+// -- Main ------------------------------------------------------------
 const PORT = 3001;
 const LAN_IP = getLocalIP();
 const BASE = `https://${LAN_IP}:${PORT}`;
 
 (async () => {
-  // ── 1. Start server ──────────────────────────────────────────────
+  // -- 1. Start server ----------------------------------------------
   console.log(`Starting backend server on port ${PORT} (LAN IP: ${LAN_IP})...`);
   const server = spawn('node', ['src/server.js'], {
     env: { ...process.env, OMNICAM_PORT: String(PORT), NODE_ENV: 'test' },
@@ -71,7 +71,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
 
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-  // ── 2. Launch browser ────────────────────────────────────────────
+  // -- 2. Launch browser --------------------------------------------
   const browser = await puppeteer.launch({
     headless: true,
     args: [
@@ -85,14 +85,14 @@ const BASE = `https://${LAN_IP}:${PORT}`;
 
   let exitCode = 1;
   try {
-    // ── 3. Open dashboard ────────────────────────────────────────────
+    // -- 3. Open dashboard --------------------------------------------
     console.log('Opening dashboard...');
     const dashboard = await browser.newPage();
     const pageErrors = [];
     dashboard.on('pageerror', (err) => pageErrors.push(err.message));
     await dashboard.goto(BASE);
 
-    // ── 4. Pair a camera via token ──────────────────────────────────
+    // -- 4. Pair a camera via token ----------------------------------
     console.log('Fetching pairing token...');
     const res = await fetch(`${BASE}/api/token`);
     const data = await res.json();
@@ -115,7 +115,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     }, { timeout: 10000 });
     console.log('Sender authenticated.');
 
-    // ── 5. Resolve camId from dashboard card ────────────────────────
+    // -- 5. Resolve camId from dashboard card ------------------------
     console.log('Waiting for camera card on dashboard...');
     await dashboard.bringToFront();
     await dashboard.waitForSelector('.cam-card', { timeout: 10000 });
@@ -123,7 +123,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     const globalCamId = camIdText.replace('ID: ', '').trim();
     console.log('Camera ID:', globalCamId);
 
-    // ── 6. Wait for telemetry ≥ 10 s on dashboard ───────────────────
+    // -- 6. Wait for telemetry >= 10 s on dashboard -------------------
     console.log('Waiting for telemetry to flow for >= 10 s...');
     await dashboard.click(`#chk-preview-${globalCamId}`);
     const telemetryStart = Date.now();
@@ -149,7 +149,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(telemetryText.includes('kbps'), 'Telemetry must contain kbps');
     assert(telemetryText.includes('fps'), 'Telemetry must contain fps');
 
-    // ── 7. Assert dashboard preview: srcObject, videoWidth, currentTime ──
+    // -- 7. Assert dashboard preview: srcObject, videoWidth, currentTime --
     console.log('Asserting dashboard preview video...');
 
     const dashPreview = await dashboard.evaluate(async (id) => {
@@ -181,7 +181,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(dashPreview.videoWidth > 0, 'dashboard preview videoWidth must be > 0');
     assert(dashPreview.t2 > dashPreview.t1, 'dashboard preview currentTime must advance');
 
-    // ── 8. Open /view page (OBS path) via HTTP and assert ───────────
+    // -- 8. Open /view page (OBS path) via HTTP and assert -----------
     console.log('Opening /view page via HTTP...');
     const viewPage = await browser.newPage();
     await viewPage.goto(`http://127.0.0.1:${PORT + 1}/view/index.html?camId=${globalCamId}&obs=1`);
@@ -259,9 +259,9 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     console.log('Sender audio level text:', senderAudioLevel);
     // Relaxed check: just ensure the meter is present and not muted,
     // as the fake audio device in headless sometimes yields RMS 0.
-    assert(senderAudioLevel.includes('🎤'), 'Audio meter must show mic icon (outbound audio active)');
+    assert(senderAudioLevel.includes('Mic:'), 'Audio meter must show mic icon (outbound audio active)');
 
-    // ── Test Mute functionality ────────────────────────────────────
+    // -- Test Mute functionality ------------------------------------
     console.log('Clicking "Mute" on SENDER...');
     await senderPage.bringToFront();
     await senderPage.click('#btn-mute');
@@ -271,9 +271,9 @@ const BASE = `https://${LAN_IP}:${PORT}`;
       return el ? el.innerText : '';
     });
     console.log('Sender muted text:', senderAudioMuted);
-    assert(senderAudioMuted.includes('🔇'), 'Audio meter must show mute icon');
+    assert(senderAudioMuted.includes('Mute:'), 'Audio meter must show mute icon');
 
-    // ── Resilience (c): Wake Lock visibility ───────────────────────
+    // -- Resilience (c): Wake Lock visibility -----------------------
     console.log('Testing Wake Lock on visibility change...');
     await senderPage.evaluate(() => {
       Object.defineProperty(document, 'visibilityState', { value: 'hidden', writable: true });
@@ -283,7 +283,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     });
     console.log('Wake Lock visibility test passed (no crash).');
 
-    // ── Resilience (a): Kill Sender WS ─────────────────────────────
+    // -- Resilience (a): Kill Sender WS -----------------------------
     console.log('Simulating Sender network drop for 10s...');
     await senderPage.setOfflineMode(true);
     // Wait for WS to close due to offline
@@ -315,7 +315,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(viewSample4.currentTime > viewSample3.currentTime, 'View video must resume after WS reconnect');
     console.log('Sender WebSocket reconnect resilience passed.');
 
-    // ── Resilience (b): OBS Bridge Reconnect ───────────────────────
+    // -- Resilience (b): OBS Bridge Reconnect -----------------------
     console.log('Simulating OBS Bridge disconnect...');
     await dashboard.evaluate(async (port) => {
       await fetch(`/api/settings`, {
@@ -348,8 +348,17 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(tallyColor.includes('tally-red'), 'Tally must be red after bridge reconnect');
     console.log('OBS Bridge reconnect resilience passed.');
 
-    // ── 9. Disconnect via Dashboard ("Putuskan") ────────────────────
+    
+    console.log('Testing DELETE API on online camera (expect 409)...');
+    const status409 = await dashboard.evaluate(async (id) => {
+      let res = await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
+      return res.status;
+    }, globalCamId);
+    assert(status409 === 409, 'DELETE online camera should return 409');
+
+// -- 9. Disconnect via Dashboard ("Putuskan") --------------------
     console.log('Clicking "Putuskan" on dashboard...');
+    dashboard.on('console', msg => console.log('[DASHBOARD]', msg.text()));
     await dashboard.bringToFront();
     
     // Stub confirm dialog to return true
@@ -385,12 +394,53 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     
     console.log('Sender disconnect logic working correctly.');
 
-    // ── 10. Final ───────────────────────────────────────────────────
+    
+    // -- 9.5 Delete via Dashboard ("Hapus") --------------------
+    console.log('Testing Hapus button visibility and deletion...');
+    
+    await dashboard.waitForFunction(
+      (id) => {
+        const btnDelete = document.getElementById(`btn-delete-${id}`);
+        const btnDisconnect = document.getElementById(`btn-disconnect-${id}`);
+        return btnDelete && btnDelete.style.display !== 'none' && (!btnDisconnect || btnDisconnect.style.display === 'none');
+      },
+      { timeout: 5000 },
+      globalCamId
+    );
+
+    console.log('Clicking "Hapus" on dashboard...');
+    
+    dashboard.on('dialog', async dialog => {
+      console.log('Dialog:', dialog.message());
+      await dialog.accept();
+    });
+
+    await dashboard.$eval(`#btn-delete-${globalCamId}`, btn => {
+      btn.click();
+    });
+
+    await dashboard.waitForFunction(
+      (id) => {
+        return document.getElementById(`btn-delete-${id}`) === null;
+      },
+      { timeout: 10000 },
+      globalCamId
+    );
+    console.log('Camera card successfully removed after Hapus.');
+    
+    console.log('Testing DELETE API on unknown camera (expect 404)...');
+    const status404 = await dashboard.evaluate(async () => {
+      let res = await fetch(`/api/cameras/nonexistent`, { method: 'DELETE' });
+      return res.status;
+    });
+    assert(status404 === 404, 'DELETE unknown camera should return 404');
+
+// -- 10. Final ---------------------------------------------------
     assert(pageErrors.length === 0, `Dashboard had page errors: ${pageErrors.join('; ')}`);
-    console.log('\n✅ E2E Test Passed!');
+    console.log('\n[PASS] E2E Test Passed!');
     exitCode = 0;
   } catch (err) {
-    console.error('\n❌ E2E Test Failed:', err.message);
+    console.error('\n[FAIL] E2E Test Failed:', err.message);
     exitCode = 1;
   } finally {
     await browser.close();

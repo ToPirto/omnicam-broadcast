@@ -41,6 +41,13 @@ describe('CameraRegistry', () => {
     expect(() => registry.register('cam3', {}, 't3')).toThrow('Maximum cameras reached');
   });
 
+  it('deletes camera completely', () => {
+    registry.register('cam1', {}, 'token1');
+    registry.deleteCamera('cam1');
+    expect(registry.getCamera('cam1')).toBeUndefined();
+    expect(registry.listCameras().find(c => c.id === 'cam1')).toBeUndefined();
+  });
+
   it('manages viewers', () => {
     registry.register('cam1', {}, 't1');
     registry.addViewer('cam1', 'ws1');

@@ -63,6 +63,22 @@ async function start() {
     return { token, url, qr };
   });
 
+  
+  fastify.delete('/api/cameras/:id', async (request, reply) => {
+    const { id } = request.params;
+    const all = registry.listCameras();
+    const cam = all.find(c => c.id === id);
+    if (!cam) {
+      return reply.code(404).send({ error: 'Camera not found' });
+    }
+    if (cam.status === 'online') {
+      return reply.code(409).send({ error: 'Cannot delete an online camera' });
+    }
+    registry.deleteCamera(id);
+    signaling.broadcastToDashboards({ type: 'cam_remove', from: 'server', to: 'dashboard', payload: { camId: id } });
+    return { success: true };
+  });
+
   fastify.get('/api/cameras', async (request, reply) => {
     return registry.listCameras();
   });
@@ -134,7 +150,7 @@ async function start() {
     
     const ips = getLocalIPs();
     console.log('\n=========================================');
-    console.log('🎥 OmniCam Broadcast Server Started');
+    console.log('OmniCam Broadcast Server Started');
     console.log('=========================================');
     console.log(`Dashboard : https://localhost:${config.port}`);
     console.log(`OBS Local : http://127.0.0.1:${config.port + 1}`);
@@ -142,7 +158,7 @@ async function start() {
       console.log(`LAN Access: https://${ip}:${config.port}`);
     });
     console.log('-----------------------------------------');
-    console.log('⚠️  Note: You will see a "Not Secure" warning in your browser.');
+    console.log('[WARNING]  Note: You will see a "Not Secure" warning in your browser.');
     console.log('   This is expected for local HTTPS. Proceed to the site.');
     console.log('=========================================\n');
   } catch (err) {

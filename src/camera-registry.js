@@ -71,6 +71,12 @@ export class CameraRegistry {
     this.#viewers.delete(camId);
   }
 
+  deleteCamera(camId) {
+    this.unregister(camId);
+    this.#persisted.delete(camId);
+    this.#save();
+  }
+
   getCamera(camId) {
     const cam = this.#cameras.get(camId);
     if (!cam) return undefined;
