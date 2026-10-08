@@ -134,7 +134,7 @@ async function start() {
     
     const ips = getLocalIPs();
     console.log('\n=========================================');
-    console.log('🎥 OmniCam Broadcast Server Started');
+    console.log('[SERVER] OmniCam Broadcast Server Started');
     console.log('=========================================');
     console.log(`Dashboard : https://localhost:${config.port}`);
     console.log(`OBS Local : http://127.0.0.1:${config.port + 1}`);
@@ -142,7 +142,7 @@ async function start() {
       console.log(`LAN Access: https://${ip}:${config.port}`);
     });
     console.log('-----------------------------------------');
-    console.log('⚠️  Note: You will see a "Not Secure" warning in your browser.');
+    console.log('[WARNING]  Note: You will see a "Not Secure" warning in your browser.');
     console.log('   This is expected for local HTTPS. Proceed to the site.');
     console.log('=========================================\n');
   } catch (err) {

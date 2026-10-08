@@ -290,7 +290,7 @@ if (!isNode) {
     
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
-      const updateBat = () => { batteryEl.innerText = `🔋 ${Math.round(battery.level * 100)}%`; };
+      const updateBat = () => { batteryEl.innerText = `Bat: ${Math.round(battery.level * 100)}%`; };
       updateBat();
       battery.addEventListener('levelchange', updateBat);
     }
@@ -329,7 +329,7 @@ function startConnection() {
   ws.onopen = () => {
     reconnectAttempts = 0;
     console.log('WS state: onopen');
-    statusEl.innerText = '● Menghubungkan (Signaling)...';
+    statusEl.innerText = '* Menghubungkan (Signaling)...';
     ws.send(JSON.stringify(createEnvelope('auth', camId, 'server', { token, sessionToken })));
   };
 
@@ -338,7 +338,7 @@ function startConnection() {
     
     if (msg.type === 'auth_ok') {
       console.log('WS state: auth_ok');
-      statusEl.innerText = '● Terautentikasi (Menunggu Viewer)';
+      statusEl.innerText = '* Terautentikasi (Menunggu Viewer)';
       camId = msg.payload.camId;
       sessionToken = msg.payload.sessionToken;
       sessionStorage.setItem('omnicam_session', sessionToken);
@@ -399,7 +399,7 @@ function startConnection() {
       console.log('Intentional disconnect, not reconnecting.');
       return;
     }
-    statusEl.innerText = '● Terputus, menyambungkan ulang...';
+    statusEl.innerText = '* Terputus, menyambungkan ulang...';
     reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
     setTimeout(startConnection, delay);
@@ -419,10 +419,10 @@ function checkGlobalStatus() {
     if (pc.connectionState === 'connected') connected = true;
   });
   if (connected) {
-    statusEl.innerText = '● WebRTC Terhubung (Live)';
+    statusEl.innerText = '* WebRTC Terhubung (Live)';
     startTelemetry();
   } else {
-    statusEl.innerText = '● Terautentikasi (Menunggu Viewer)';
+    statusEl.innerText = '* Terautentikasi (Menunggu Viewer)';
     stopTelemetry();
   }
 }
@@ -689,9 +689,9 @@ function startTelemetry() {
             mainValid = true;
           }
           if (adaptiveStep > 0) {
-            document.getElementById('status').innerText = `● WebRTC Terhubung (Live) [Drop: ${['', 'Bitrate', 'FPS', 'Resolusi'][adaptiveStep]}]`;
+            document.getElementById('status').innerText = `* WebRTC Terhubung (Live) [Drop: ${['', 'Bitrate', 'FPS', 'Resolusi'][adaptiveStep]}]`;
           } else {
-            document.getElementById('status').innerText = `● WebRTC Terhubung (Live)`;
+            document.getElementById('status').innerText = `* WebRTC Terhubung (Live)`;
           }
         } else if (!mainValid && activePeers === 1 && result.hasTwoSamples) {
           mainBitrate = result.bitrate;
@@ -740,10 +740,10 @@ function startTelemetry() {
       let barStr = '';
       for (let i = 0; i < 5; i++) {
         if (isMuted) barStr += 'x';
-        else if (i < barCount) barStr += '█';
-        else barStr += '▒';
+        else if (i < barCount) barStr += '#';
+        else barStr += '-';
       }
-      audioEl.innerText = isMuted ? `🔇 ${barStr}` : `🎤 ${barStr}`;
+      audioEl.innerText = isMuted ? `Mute: ${barStr}` : `Mic: ${barStr}`;
       audioEl.style.color = isMuted ? '#dc3545' : '';
     }
 
@@ -751,7 +751,7 @@ function startTelemetry() {
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
       batteryLvl = battery.level;
-      if (powersaveBattery) powersaveBattery.innerText = `🔋 ${Math.round(battery.level * 100)}%`;
+      if (powersaveBattery) powersaveBattery.innerText = `Bat: ${Math.round(battery.level * 100)}%`;
       if (battery.level < 0.2 && !battery.charging) {
         if (powersaveBattery) powersaveBattery.style.color = '#dc3545';
         const battEl = document.getElementById('battery');

@@ -89,14 +89,14 @@ export class ObsBridge {
 
     this.obs.on('Identified', () => {
       if (!this.connected) {
-        console.log('🔗 Connected and Identified to OBS WebSocket');
+        console.log('[OK] Connected and Identified to OBS WebSocket');
       }
       this._setConnected(true);
     });
     
     this.obs.on('ConnectionClosed', () => {
       if (this.connected) {
-        console.log('🔌 Disconnected from OBS WebSocket');
+        console.log('[DISCONNECTED] Disconnected from OBS WebSocket');
       }
       this._setConnected(false);
       this.reconnectWithDelay(Math.min(30000, 2000 * Math.pow(2, this.reconnectAttempt)));
@@ -248,7 +248,7 @@ export class ObsBridge {
       this.obs = null;
     }
     if (this.connected) {
-      console.log('🔌 Disconnected from OBS WebSocket');
+      console.log('[DISCONNECTED] Disconnected from OBS WebSocket');
     }
     this._setConnected(false);
   }

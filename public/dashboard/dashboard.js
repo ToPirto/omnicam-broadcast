@@ -70,6 +70,9 @@ function connect() {
     } else if (msg.type === 'cam_leave') {
       const camId = msg.payload.camId || msg.from;
       updateCameraUI(camId, { status: 'offline' });
+    } else if (msg.type === 'cam_remove') {
+      const camId = msg.payload.camId || msg.from;
+      removeCamera(camId);
     } else if (msg.type === 'telemetry') {
       const camId = msg.from;
       updateCameraUI(camId, { lastTelemetry: msg.payload });
@@ -132,7 +135,7 @@ async function handleWebRTCOffer(msg) {
       if (placeholder) placeholder.style.display = 'none';
       videoEl.style.display = 'block';
     } else if (!event.streams || !event.streams[0]) {
-      // Additional tracks (audio) on same connection — add to existing stream
+      // Additional tracks (audio) on same connection - add to existing stream
       inboundStream.addTrack(event.track);
     }
   };
@@ -193,10 +196,10 @@ async function patchCamera(id, data) {
     div.innerHTML = `
       <h3 style="display: flex; justify-content: space-between; align-items: center;">
         <span id="name-${id}"></span>
-        <button id="btn-rename-${id}" style="background: transparent; border: none; font-size: 0.8em; cursor: pointer;" title="Ubah Nama">✏️</button>
+        <button id="btn-rename-${id}" style="background: transparent; border: 1px solid #555; border-radius: 3px; color: #fff; font-size: 0.8em; cursor: pointer; padding: 2px 5px;" title="Ubah Nama">Ubah</button>
       </h3>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <p style="margin:0;">● Terhubung <span id="tally-${id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: #555; color: #fff;">OFF</span></p>
+        <p style="margin:0;">Terhubung <span id="tally-${id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: #555; color: #fff;">OFF</span></p>
         <label style="font-size: 0.8em; cursor: pointer; color: #aaa;"><input type="checkbox" id="chk-preview-${id}"> Preview</label>
       </div>
       
@@ -211,8 +214,9 @@ async function patchCamera(id, data) {
       <a href="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
       <br><br>
       <input type="text" value="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1" readonly onclick="this.select(); document.execCommand('copy'); alert('Disalin!')" style="width: 100%; padding: 5px; margin-bottom: 10px; border-radius: 3px; border: 1px solid #555; background: #333; color: #fff; box-sizing: border-box;" title="URL OBS (Klik untuk copy)">
-      <button class="btn-add-obs" id="btn-obs-${id}" style="background: #28a745; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
+      <button class="btn-add-obs" id="btn-obs-${id}" style="background: #28a745; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
       <button id="btn-disconnect-${id}" style="background: #dc3545; color: white; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px;">Putuskan</button>
+      <button id="btn-delete-${id}" style="background: #dc3545; color: white; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px; display: none;">Hapus</button>
       <div style="font-size: 0.8em; color: #666;">ID: ${id}</div>
     `;
     
@@ -379,7 +383,7 @@ function updateCameraUI(id, data) {
       const bat = data.lastTelemetry.battery ? Math.round(data.lastTelemetry.battery * 100) + '%' : 'N/A';
       const bit = data.lastTelemetry.bitrate ? Math.round(data.lastTelemetry.bitrate/1000) : 0;
       const fps = data.lastTelemetry.fps || 0;
-      el.textContent = `🔋 ${bat} | ⚡ ${bit} kbps | ${fps} fps`;
+      el.textContent = `Bat: ${bat} | Bitrate: ${bit} kbps | ${fps} fps`;
     }
   }
 }

@@ -6,7 +6,7 @@ export const i18n = {
     startCamera: 'Mulai Kamera',
     addCamera: 'Tambah Kamera',
     scanQr: 'Scan QR ini dengan HP kamu',
-    certWarning: '⚠️ Pertama kali? Baca panduan sertifikat →',
+    certWarning: '[WARNING] Pertama kali? Baca panduan sertifikat ->',
     cameraList: 'Daftar Kamera',
     notSupported: 'Tidak didukung',
     obsNotConnected: 'OBS: Tidak terhubung'
@@ -18,7 +18,7 @@ export const i18n = {
     startCamera: 'Start Camera',
     addCamera: 'Add Camera',
     scanQr: 'Scan this QR with your phone',
-    certWarning: '⚠️ First time? Read cert guide →',
+    certWarning: '[WARNING] First time? Read cert guide ->',
     cameraList: 'Camera List',
     notSupported: 'Not supported',
     obsNotConnected: 'OBS: Not connected'
