@@ -255,6 +255,29 @@ async function patchCamera(id, data) {
       }
     };
 
+    document.getElementById(`btn-delete-${id}`).onclick = async () => {
+      console.log('btn-delete clicked!');
+      if (confirm('Hapus kamera ini?')) {
+        console.log('confirmed hapus');
+        try {
+          const res = await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
+          console.log('fetch res:', res.status);
+          if (res.ok) {
+            removeCamera(id);
+            console.log('removed camera from DOM');
+          } else {
+            console.log('fetch failed');
+            alert('Gagal menghapus kamera');
+          }
+        } catch (e) {
+          console.log('fetch error', e);
+          alert('Gagal menghapus kamera');
+        }
+      } else {
+        console.log('not confirmed');
+      }
+    };
+
     document.getElementById(`btn-disconnect-${id}`).onclick = () => {
       if (confirm('Putuskan kamera ini?')) {
         if (ws.readyState === WebSocket.OPEN) {
@@ -346,7 +369,11 @@ function updateCameraUI(id, data) {
   if (data.status) {
     const placeholder = document.getElementById(`preview-placeholder-${id}`);
     const videoEl = document.getElementById(`preview-vid-${id}`);
+    const btnDelete = document.getElementById(`btn-delete-${id}`);
+    const btnDisconnect = document.getElementById(`btn-disconnect-${id}`);
     if (data.status === 'offline') {
+      if (btnDelete) btnDelete.style.display = 'block';
+      if (btnDisconnect) btnDisconnect.style.display = 'none';
       if (placeholder) {
         placeholder.style.display = 'block';
         placeholder.textContent = 'Kamera terputus';
@@ -360,6 +387,8 @@ function updateCameraUI(id, data) {
         webrtcs.delete(id);
       }
     } else if (data.status === 'online') {
+      if (btnDelete) btnDelete.style.display = 'none';
+      if (btnDisconnect) btnDisconnect.style.display = 'block';
       if (placeholder) {
         placeholder.style.display = 'block';
         placeholder.textContent = 'Menunggu video...';

@@ -63,6 +63,22 @@ async function start() {
     return { token, url, qr };
   });
 
+  
+  fastify.delete('/api/cameras/:id', async (request, reply) => {
+    const { id } = request.params;
+    const all = registry.listCameras();
+    const cam = all.find(c => c.id === id);
+    if (!cam) {
+      return reply.code(404).send({ error: 'Camera not found' });
+    }
+    if (cam.status === 'online') {
+      return reply.code(409).send({ error: 'Cannot delete an online camera' });
+    }
+    registry.deleteCamera(id);
+    signaling.broadcastToDashboards({ type: 'cam_remove', from: 'server', to: 'dashboard', payload: { camId: id } });
+    return { success: true };
+  });
+
   fastify.get('/api/cameras', async (request, reply) => {
     return registry.listCameras();
   });

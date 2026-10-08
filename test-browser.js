@@ -348,8 +348,17 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     assert(tallyColor.includes('tally-red'), 'Tally must be red after bridge reconnect');
     console.log('OBS Bridge reconnect resilience passed.');
 
-    // -- 9. Disconnect via Dashboard ("Putuskan") --------------------
+    
+    console.log('Testing DELETE API on online camera (expect 409)...');
+    const status409 = await dashboard.evaluate(async (id) => {
+      let res = await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
+      return res.status;
+    }, globalCamId);
+    assert(status409 === 409, 'DELETE online camera should return 409');
+
+// -- 9. Disconnect via Dashboard ("Putuskan") --------------------
     console.log('Clicking "Putuskan" on dashboard...');
+    dashboard.on('console', msg => console.log('[DASHBOARD]', msg.text()));
     await dashboard.bringToFront();
     
     // Stub confirm dialog to return true
@@ -385,7 +394,49 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     
     console.log('Sender disconnect logic working correctly.');
 
-    // -- 10. Final ---------------------------------------------------
+    
+    // -- 9.5 Delete via Dashboard ("Hapus") --------------------
+    console.log('Testing Hapus button visibility and deletion...');
+    
+    await dashboard.waitForFunction(
+      (id) => {
+        const btnDelete = document.getElementById(`btn-delete-${id}`);
+        const btnDisconnect = document.getElementById(`btn-disconnect-${id}`);
+        return btnDelete && btnDelete.style.display !== 'none' && (!btnDisconnect || btnDisconnect.style.display === 'none');
+      },
+      { timeout: 5000 },
+      globalCamId
+    );
+
+    console.log('Clicking "Hapus" on dashboard...');
+    
+    dashboard.on('dialog', async dialog => {
+      console.log('Dialog:', dialog.message());
+      await dialog.accept();
+    });
+
+    await dashboard.$eval(`#btn-delete-${globalCamId}`, btn => {
+      console.log('Clicking btn-delete directly via eval...');
+      btn.click();
+    });
+
+    await dashboard.waitForFunction(
+      (id) => {
+        return document.getElementById(`btn-delete-${id}`) === null;
+      },
+      { timeout: 10000 },
+      globalCamId
+    );
+    console.log('Camera card successfully removed after Hapus.');
+    
+    console.log('Testing DELETE API on unknown camera (expect 404)...');
+    const status404 = await dashboard.evaluate(async () => {
+      let res = await fetch(`/api/cameras/nonexistent`, { method: 'DELETE' });
+      return res.status;
+    });
+    assert(status404 === 404, 'DELETE unknown camera should return 404');
+
+// -- 10. Final ---------------------------------------------------
     assert(pageErrors.length === 0, `Dashboard had page errors: ${pageErrors.join('; ')}`);
     console.log('\n[PASS] E2E Test Passed!');
     exitCode = 0;
