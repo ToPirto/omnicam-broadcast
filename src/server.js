@@ -150,7 +150,7 @@ async function start() {
     
     const ips = getLocalIPs();
     console.log('\n=========================================');
-    console.log('[SERVER] OmniCam Broadcast Server Started');
+    console.log('OmniCam Broadcast Server Started');
     console.log('=========================================');
     console.log(`Dashboard : https://localhost:${config.port}`);
     console.log(`OBS Local : http://127.0.0.1:${config.port + 1}`);

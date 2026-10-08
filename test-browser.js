@@ -416,7 +416,6 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     });
 
     await dashboard.$eval(`#btn-delete-${globalCamId}`, btn => {
-      console.log('Clicking btn-delete directly via eval...');
       btn.click();
     });
 
