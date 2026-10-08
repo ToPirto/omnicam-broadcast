@@ -53,14 +53,32 @@ async function requestWakeLock() {
 
 if (!isNode) {
   btnFullscreen.id = 'btn-fullscreen';
-  btnFullscreen.innerText = 'Layar penuh + kunci landscape';
-  document.querySelector('.controls').appendChild(btnFullscreen);
+  btnFullscreen.innerText = 'Layar Penuh / Kunci Landscape';
+  document.querySelector('.setup-panel').appendChild(btnFullscreen);
 
   document.addEventListener('visibilitychange', async () => {
     if (wakeLock !== null && document.visibilityState === 'visible') {
       await requestWakeLock();
     }
   });
+
+  const audioMeter = document.getElementById('audio-meter');
+  if (audioMeter) {
+    for (let i = 0; i < 16; i++) {
+      const seg = document.createElement('div');
+      seg.className = 'led-segment';
+      seg.id = `audio-seg-${i}`;
+      audioMeter.appendChild(seg);
+    }
+  }
+
+  setInterval(() => {
+    const clock = document.getElementById('clock');
+    if (clock) {
+      const now = new Date();
+      clock.innerText = now.toTimeString().split(' ')[0];
+    }
+  }, 1000);
 
   const diagPanel = document.getElementById('diagnostics-panel');
   const btnToggleDiag = document.getElementById('btn-toggle-diag');
@@ -145,8 +163,6 @@ async function startCamera(deviceId = null) {
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.contentHint = 'motion';
-      const s = videoTrack.getSettings();
-      resolutionEl.innerText = `${s.width || 0}x${s.height || 0}`;
     }
 
     if (typeof window !== 'undefined' && window.AudioContext) {
@@ -258,7 +274,7 @@ if (!isNode) {
         audioTrack.enabled = !isMuted;
       }
     }
-    btnMute.innerText = isMuted ? 'Unmute' : 'Mute';
+    btnMute.innerText = isMuted ? 'UNMUTE' : 'MUTE';
     btnMute.style.background = isMuted ? '#dc3545' : '';
     btnMute.style.color = isMuted ? 'white' : '';
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -283,14 +299,16 @@ if (!isNode) {
     await startCamera(currentDeviceId);
 
     startConnection();
+    const setupPanel = document.getElementById('setup-panel');
+    if (setupPanel) setupPanel.style.display = 'none';
     btnStart.style.display = 'none';
     btnDisconnect.style.display = 'inline-block';
     btnMute.style.display = 'inline-block';
-    if (btnPowersave) btnPowersave.style.display = 'block';
+    if (btnPowersave) btnPowersave.style.display = 'inline-block';
     
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
-      const updateBat = () => { batteryEl.innerText = `Bat: ${Math.round(battery.level * 100)}%`; };
+      const updateBat = () => { if(batteryEl) batteryEl.innerText = `BAT: ${Math.round(battery.level * 100)}%`; };
       updateBat();
       battery.addEventListener('levelchange', updateBat);
     }
@@ -313,6 +331,11 @@ if (!isNode) {
     sessionStorage.removeItem('omnicam_id');
     
     btnDisconnect.style.display = 'none';
+    btnMute.style.display = 'none';
+    if (btnPowersave) btnPowersave.style.display = 'none';
+    
+    const setupPanel = document.getElementById('setup-panel');
+    if (setupPanel) setupPanel.style.display = 'flex';
     btnStart.style.display = 'inline-block';
     btnStart.innerText = 'Scan Ulang QR';
     btnStart.onclick = () => window.location.href = '/';
@@ -329,7 +352,7 @@ function startConnection() {
   ws.onopen = () => {
     reconnectAttempts = 0;
     console.log('WS state: onopen');
-    statusEl.innerText = '* Menghubungkan (Signaling)...';
+    statusEl.innerText = 'Menghubungkan (Signaling)...';
     ws.send(JSON.stringify(createEnvelope('auth', camId, 'server', { token, sessionToken })));
   };
 
@@ -338,14 +361,16 @@ function startConnection() {
     
     if (msg.type === 'auth_ok') {
       console.log('WS state: auth_ok');
-      statusEl.innerText = '* Terautentikasi (Menunggu Viewer)';
+      statusEl.innerText = 'Terautentikasi (Menunggu Viewer)';
       camId = msg.payload.camId;
       sessionToken = msg.payload.sessionToken;
       sessionStorage.setItem('omnicam_session', sessionToken);
       sessionStorage.setItem('omnicam_id', camId);
     } else if (msg.type === 'auth_fail') {
       console.error('Auth failed:', msg.payload.reason);
-      statusEl.innerHTML = `<span style="color: red;">Gagal: ${msg.payload.reason}. Harap scan QR baru.</span>`;
+      if (statusEl) statusEl.innerHTML = `<span style="color: red;">Gagal: ${msg.payload.reason}. Harap scan QR baru.</span>`;
+      const setupPanel = document.getElementById('setup-panel');
+      if (setupPanel) setupPanel.style.display = 'flex';
       btnStart.style.display = 'inline-block';
       btnStart.innerText = 'Scan Ulang QR';
       btnStart.onclick = () => window.location.href = '/';
@@ -399,7 +424,7 @@ function startConnection() {
       console.log('Intentional disconnect, not reconnecting.');
       return;
     }
-    statusEl.innerText = '* Terputus, menyambungkan ulang...';
+    statusEl.innerText = 'Terputus, menyambungkan ulang...';
     reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
     setTimeout(startConnection, delay);
@@ -418,11 +443,14 @@ function checkGlobalStatus() {
   peers.forEach(pc => {
     if (pc.connectionState === 'connected') connected = true;
   });
+  const dot = isNode ? null : document.getElementById('status-dot');
   if (connected) {
-    statusEl.innerText = '* WebRTC Terhubung (Live)';
+    if (statusEl) statusEl.innerText = 'WebRTC Terhubung (Live)';
+    if (dot) dot.classList.add('live');
     startTelemetry();
   } else {
-    statusEl.innerText = '* Terautentikasi (Menunggu Viewer)';
+    if (statusEl) statusEl.innerText = 'Terautentikasi (Menunggu Viewer)';
+    if (dot) dot.classList.remove('live');
     stopTelemetry();
   }
 }
@@ -713,8 +741,12 @@ function startTelemetry() {
 
     if (activePeers === 0) return;
 
-    bitrateEl.innerText = mainValid ? `${Math.round(mainBitrate / 1000)} kbps` : '- kbps';
-    fpsEl.innerText = mainValid ? `${Math.round(mainFps)} fps` : '- fps';
+    const telEl = document.getElementById('telemetry');
+    if (telEl) {
+      const mbps = mainValid ? (mainBitrate / 1000000).toFixed(1) : '0.0';
+      const fpsStr = mainValid ? Math.round(mainFps) : 0;
+      telEl.innerText = `1080p${fpsStr} | ${mbps} Mbps | LOSS: 0`;
+    }
     
     let audioLvl = 0;
     let rawRms = 0;
@@ -729,29 +761,30 @@ function startTelemetry() {
       audioLvl = isMuted ? 0 : Math.min(Math.round(rawRms * 10 * 100), 100);
     }
     
-    // Add debug log for audio
-    if (!isMuted && audioAnalyser) {
-      console.log(`Audio RMS: ${rawRms}, audioLvl: ${audioLvl}`);
+    const audioText = document.getElementById('audio-text');
+    if (audioText) {
+      audioText.innerText = isMuted ? '[MUTE]' : 'MIC';
+      audioText.style.color = isMuted ? '#8e8e93' : '#8e8e93';
     }
 
-    const audioEl = document.getElementById('audio-level');
-    if (audioEl) {
-      const barCount = Math.round(audioLvl / 20);
-      let barStr = '';
-      for (let i = 0; i < 5; i++) {
-        if (isMuted) barStr += 'x';
-        else if (i < barCount) barStr += '#';
-        else barStr += '-';
+    const barCount = Math.round((audioLvl / 100) * 16);
+    for (let i = 0; i < 16; i++) {
+      const seg = document.getElementById(`audio-seg-${i}`);
+      if (seg) {
+        seg.className = 'led-segment';
+        if (!isMuted && i < barCount) {
+          if (i < 10) seg.classList.add('active-green');
+          else if (i < 14) seg.classList.add('active-yellow');
+          else seg.classList.add('active-red');
+        }
       }
-      audioEl.innerText = isMuted ? `Mute: ${barStr}` : `Mic: ${barStr}`;
-      audioEl.style.color = isMuted ? '#dc3545' : '';
     }
 
     let batteryLvl = null;
     if ('getBattery' in navigator) {
       const battery = await navigator.getBattery();
       batteryLvl = battery.level;
-      if (powersaveBattery) powersaveBattery.innerText = `Bat: ${Math.round(battery.level * 100)}%`;
+      if (powersaveBattery) powersaveBattery.innerText = `BAT: ${Math.round(battery.level * 100)}%`;
       if (battery.level < 0.2 && !battery.charging) {
         if (powersaveBattery) powersaveBattery.style.color = '#dc3545';
         const battEl = document.getElementById('battery');

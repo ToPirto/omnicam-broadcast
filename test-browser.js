@@ -128,11 +128,11 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     await dashboard.click(`#chk-preview-${globalCamId}`);
     const telemetryStart = Date.now();
 
-    // First, wait until telemetry UI shows fps data at all
+    // First, wait until telemetry UI shows 1080p data at all
     await dashboard.waitForFunction(
       (id) => {
         const el = document.getElementById(`telemetry-${id}`);
-        return el && el.innerText.includes('fps');
+        return el && el.innerText.includes('1080p');
       },
       { timeout: 20000 },
       globalCamId,
@@ -143,11 +143,11 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     const remaining = Math.max(0, 10000 - elapsedSoFar);
     if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
 
-    // Verify telemetry is still updating (kbps > 0)
+    // Verify telemetry is still updating (Mbps > 0)
     const telemetryText = await dashboard.$eval(`#telemetry-${globalCamId}`, (el) => el.innerText);
     console.log('Telemetry after >=10 s:', telemetryText);
-    assert(telemetryText.includes('kbps'), 'Telemetry must contain kbps');
-    assert(telemetryText.includes('fps'), 'Telemetry must contain fps');
+    assert(telemetryText.includes('Mbps'), 'Telemetry must contain Mbps');
+    assert(telemetryText.includes('1080p'), 'Telemetry must contain 1080p');
 
     // -- 7. Assert dashboard preview: srcObject, videoWidth, currentTime --
     console.log('Asserting dashboard preview video...');
@@ -253,13 +253,13 @@ const BASE = `https://${LAN_IP}:${PORT}`;
 
     // Assert outbound audio energy > 0 on sender side
     const senderAudioLevel = await senderPage.evaluate(() => {
-      const el = document.getElementById('audio-level');
+      const el = document.getElementById('audio-text');
       return el ? el.innerText : '';
     });
     console.log('Sender audio level text:', senderAudioLevel);
     // Relaxed check: just ensure the meter is present and not muted,
     // as the fake audio device in headless sometimes yields RMS 0.
-    assert(senderAudioLevel.includes('Mic:'), 'Audio meter must show mic icon (outbound audio active)');
+    assert(senderAudioLevel.includes('MIC'), 'Audio meter must show MIC label (outbound audio active)');
 
     // -- Test Mute functionality ------------------------------------
     console.log('Clicking "Mute" on SENDER...');
@@ -267,11 +267,11 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     await senderPage.click('#btn-mute');
     await new Promise((r) => setTimeout(r, 1000));
     const senderAudioMuted = await senderPage.evaluate(() => {
-      const el = document.getElementById('audio-level');
+      const el = document.getElementById('audio-text');
       return el ? el.innerText : '';
     });
     console.log('Sender muted text:', senderAudioMuted);
-    assert(senderAudioMuted.includes('Mute:'), 'Audio meter must show mute icon');
+    assert(senderAudioMuted.includes('[MUTE]'), 'Audio meter must show [MUTE] label');
 
     // -- Resilience (c): Wake Lock visibility -----------------------
     console.log('Testing Wake Lock on visibility change...');

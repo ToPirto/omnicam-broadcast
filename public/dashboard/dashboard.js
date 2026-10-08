@@ -208,7 +208,11 @@ async function patchCamera(id, data) {
          <video id="preview-vid-${id}" muted autoplay playsinline style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
       </div>
 
-      <div id="telemetry-${id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">
+      <div id="audio-meter-${id}" class="led-meter-container">
+        <span class="led-text" id="audio-text-${id}">MIC</span>
+        ${Array(16).fill(0).map((_, i) => `<div class="led-segment" id="audio-seg-${id}-${i}"></div>`).join('')}
+      </div>
+      <div id="telemetry-${id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px; font-family: monospace;">
         Menunggu data...
       </div>
       <a href="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
@@ -344,15 +348,15 @@ function updateCameraUI(id, data) {
     if (el) {
        if (data.tally === 2) {
          el.textContent = 'PROGRAM';
-         el.style.background = '#f00';
+         el.style.background = '#ff3b30';
          el.style.color = '#fff';
        } else if (data.tally === 1) {
          el.textContent = 'PREVIEW';
-         el.style.background = '#0f0';
+         el.style.background = '#34c759';
          el.style.color = '#000';
        } else {
-         el.textContent = 'OFF';
-         el.style.background = '#555';
+         el.textContent = 'STANDBY';
+         el.style.background = '#8e8e93';
          el.style.color = '#fff';
        }
     }
@@ -402,9 +406,31 @@ function updateCameraUI(id, data) {
     const el = document.getElementById(`telemetry-${id}`);
     if (el) {
       const bat = data.lastTelemetry.battery ? Math.round(data.lastTelemetry.battery * 100) + '%' : 'N/A';
-      const bit = data.lastTelemetry.bitrate ? Math.round(data.lastTelemetry.bitrate/1000) : 0;
+      const bit = data.lastTelemetry.bitrate ? (data.lastTelemetry.bitrate / 1000000).toFixed(1) : '0.0';
       const fps = data.lastTelemetry.fps || 0;
-      el.textContent = `Bat: ${bat} | Bitrate: ${bit} kbps | ${fps} fps`;
+      el.textContent = `BAT: ${bat} | 1080p${fps} | ${bit} Mbps | LOSS: 0`;
+
+      const isMuted = data.lastTelemetry.isMuted;
+      const audioLvl = data.lastTelemetry.audioLevel || 0;
+      const barCount = Math.round((audioLvl / 100) * 16);
+      
+      const audioText = document.getElementById(`audio-text-${id}`);
+      if (audioText) {
+        audioText.textContent = isMuted ? '[MUTE]' : 'MIC';
+        audioText.style.color = isMuted ? '#8e8e93' : '#fff';
+      }
+      
+      for (let i = 0; i < 16; i++) {
+        const seg = document.getElementById(`audio-seg-${id}-${i}`);
+        if (seg) {
+          seg.className = 'led-segment';
+          if (!isMuted && i < barCount) {
+            if (i < 10) seg.classList.add('active-green');
+            else if (i < 14) seg.classList.add('active-yellow');
+            else seg.classList.add('active-red');
+          }
+        }
+      }
     }
   }
 }
