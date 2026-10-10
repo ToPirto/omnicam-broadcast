@@ -155,7 +155,7 @@ if (!isNode) {
       disconnect: 'PUTUS',
       mute: 'MUTE',
       unmute: 'UNMUTE',
-      batterySaver: '[BATTERY SAVER]',
+      batterySaver: 'BATTERY SAVER',
       fullscreen: 'Layar Penuh / Kunci Landscape',
       holdToWake: 'Tahan 2 detik untuk bangun',
       waiting: 'Menunggu...',
@@ -167,8 +167,8 @@ if (!isNode) {
       camDenied: 'Izin kamera ditolak atau kamera tidak tersedia.',
       camDefault: 'Kamera',
       landscapeFail: 'Gagal mengunci landscape. Aktifkan Putar Otomatis di HP dan putar HP Anda secara manual.',
-      badgeLive: '[ LIVE ]',
-      badgeDrop: '[ DROP ]'
+      badgeLive: 'LIVE',
+      badgeDrop: 'DROP'
     },
     en: {
       proSettings: 'Pro Settings',
@@ -181,7 +181,7 @@ if (!isNode) {
       disconnect: 'DISCONNECT',
       mute: 'MUTE',
       unmute: 'UNMUTE',
-      batterySaver: '[BATTERY SAVER]',
+      batterySaver: 'BATTERY SAVER',
       fullscreen: 'Fullscreen / Lock Landscape',
       holdToWake: 'Hold 2 seconds to wake',
       waiting: 'Waiting...',
@@ -193,8 +193,8 @@ if (!isNode) {
       camDenied: 'Camera permission denied or not available.',
       camDefault: 'Camera',
       landscapeFail: 'Failed to lock landscape. Enable Auto-Rotate and rotate your phone.',
-      badgeLive: '[ LIVE ]',
-      badgeDrop: '[ DROP ]'
+      badgeLive: 'LIVE',
+      badgeDrop: 'DROP'
     }
   };
 
@@ -236,8 +236,8 @@ if (!isNode) {
       menuItems[3].childNodes[1].textContent = t.resolution;
     }
 
-    if (btnGridToggle) btnGridToggle.innerText = isGridOn ? '[ ON ]' : '[ OFF ]';
-    if (btnLangToggle) btnLangToggle.innerText = currentLang === 'id' ? '[ ID | en ]' : '[ id | EN ]';
+    if (btnGridToggle) btnGridToggle.innerText = isGridOn ? 'ON' : 'OFF';
+    if (btnLangToggle) btnLangToggle.innerText = currentLang === 'id' ? 'ID | en' : 'id | EN';
     if (btnFullscreen) btnFullscreen.innerText = t.fullscreen;
     
     if (btnDisconnect && !intentionalDisconnect) btnDisconnect.innerText = t.disconnect;
@@ -295,7 +295,7 @@ if (!isNode) {
   if (btnGridToggle && gridOverlay) {
     btnGridToggle.onclick = () => {
       isGridOn = !isGridOn;
-      btnGridToggle.innerText = isGridOn ? '[ ON ]' : '[ OFF ]';
+      btnGridToggle.innerText = isGridOn ? 'ON' : 'OFF';
       gridOverlay.style.display = isGridOn ? 'block' : 'none';
     };
   }
@@ -968,7 +968,7 @@ function startTelemetry() {
             mainValid = true;
           }
           if (adaptiveStep > 0) {
-            document.getElementById('status').innerText = `* WebRTC Terhubung (Live) [Drop: ${['', 'Bitrate', 'FPS', 'Resolusi'][adaptiveStep]}]`;
+            document.getElementById('status').innerText = `* WebRTC Terhubung (Live) Drop: ${['', 'Bitrate', 'FPS', 'Resolusi'][adaptiveStep]}`;
           } else {
             document.getElementById('status').innerText = `* WebRTC Terhubung (Live)`;
           }
@@ -1000,9 +1000,9 @@ function startTelemetry() {
     if (chipRes && chipBitrate && chipLoss) {
       const mbps = mainValid ? (mainBitrate / 1000000).toFixed(1) : '0.0';
       const fpsStr = mainValid ? Math.round(mainFps) : 0;
-      chipRes.innerText = `[ 1080p${fpsStr} ]`;
-      chipBitrate.innerText = `[ ${mbps} Mbps ]`;
-      chipLoss.innerText = `[ LOSS: 0 ]`; // Hardcoded loss for now based on older implementation, can be dynamic
+      chipRes.innerText = `1080p${fpsStr}`;
+      chipBitrate.innerText = `${mbps} Mbps`;
+      chipLoss.innerText = `LOSS: 0`; // Hardcoded loss for now based on older implementation, can be dynamic
     }
     
     let audioLvl = 0;
@@ -1021,7 +1021,7 @@ function startTelemetry() {
     
     const audioText = document.getElementById('audio-text');
     if (audioText) {
-      audioText.innerText = isMuted ? '[MUTE]' : 'MIC';
+      audioText.innerText = isMuted ? 'MUTE' : 'MIC';
       audioText.style.color = isMuted ? '#8e8e93' : '#8e8e93';
     }
 

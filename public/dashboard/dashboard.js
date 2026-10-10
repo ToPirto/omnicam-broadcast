@@ -31,10 +31,10 @@ function updateObsStatus(connected) {
   if (badge && text) {
     if (connected) {
       badge.className = 'obs-badge connected';
-      text.innerText = '[ OBS: TERHUBUNG ]';
+      text.innerText = 'OBS: TERHUBUNG';
     } else {
       badge.className = 'obs-badge disconnected';
-      text.innerText = '[ OBS: TERPUTUS ]';
+      text.innerText = 'OBS: TERPUTUS';
     }
   }
 }
@@ -242,9 +242,9 @@ async function patchCamera(id, data) {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <div style="font-weight: bold; font-size: 18px;" id="name-${id}"></div>
-          <button id="btn-rename-${id}" class="btn" style="padding: 2px 6px; font-size: 10px;">[ Ubah ]</button>
+          <button id="btn-rename-${id}" class="btn" style="padding: 2px 6px; font-size: 10px;">Ubah</button>
         </div>
-        <div id="badge-tag-${id}" class="status-badge-tag standby">[ STANDBY ]</div>
+        <div id="badge-tag-${id}" class="status-badge-tag standby">STANDBY</div>
       </div>
       
       <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; border-radius: 4px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; display: none;">
@@ -257,9 +257,9 @@ async function patchCamera(id, data) {
       </div>
       
       <div class="telemetry-row">
-        <div class="telemetry-chip" id="tel-res-${id}">[ -- ]</div>
-        <div class="telemetry-chip" id="tel-bit-${id}">[ 0.0 Mbps ]</div>
-        <div class="telemetry-chip" id="tel-loss-${id}">[ LOSS: 0 ]</div>
+        <div class="telemetry-chip" id="tel-res-${id}">--</div>
+        <div class="telemetry-chip" id="tel-bit-${id}">0.0 Mbps</div>
+        <div class="telemetry-chip" id="tel-loss-${id}">LOSS: 0</div>
         <div class="telemetry-chip">
           <div class="battery-container">
             <div class="battery-body"><div id="bat-lvl-${id}" class="battery-level"></div></div>
@@ -271,19 +271,19 @@ async function patchCamera(id, data) {
       
       <div class="copy-url-box">
         <input type="text" id="obs-url-${id}" value="${obsUrl}" readonly>
-        <button class="btn" id="btn-copy-${id}">[ SALIN / COPY ]</button>
+        <button class="btn" id="btn-copy-${id}">SALIN / COPY</button>
       </div>
       
       <div style="display: flex; gap: 10px; margin-top: 15px;">
-        <button class="btn btn-green" id="btn-obs-${id}" style="flex: 1;">[ + Tambah Otomatis ke OBS ]</button>
+        <button class="btn btn-green" id="btn-obs-${id}" style="flex: 1;">+ Tambah Otomatis ke OBS</button>
       </div>
       
       <div style="display: flex; gap: 10px; margin-top: 10px;">
         <label style="flex: 1; display: flex; align-items: center; justify-content: center; background: #2a2a32; border-radius: 4px; font-size: 12px; cursor: pointer;">
           <input type="checkbox" id="chk-preview-${id}" style="margin-right: 5px;"> Preview
         </label>
-        <button class="btn btn-red" id="btn-disconnect-${id}" style="flex: 1; display: none;">[ Putuskan ]</button>
-        <button class="btn btn-red" id="btn-delete-${id}" style="flex: 1; display: none;">[ Hapus ]</button>
+        <button class="btn btn-red" id="btn-disconnect-${id}" style="flex: 1; display: none;">Putuskan</button>
+        <button class="btn btn-red" id="btn-delete-${id}" style="flex: 1; display: none;">Hapus</button>
       </div>
     `;
     
@@ -308,13 +308,13 @@ async function patchCamera(id, data) {
       input.select();
       document.execCommand('copy');
       const btn = document.getElementById(`btn-copy-${id}`);
-      btn.innerText = '[ DISALIN ]';
-      setTimeout(() => btn.innerText = '[ SALIN / COPY ]', 2000);
+      btn.innerText = 'DISALIN';
+      setTimeout(() => btn.innerText = 'SALIN / COPY', 2000);
     };
 
     document.getElementById(`btn-obs-${id}`).onclick = async (e) => {
       e.target.disabled = true;
-      e.target.textContent = '[ Menambahkan... ]';
+      e.target.textContent = 'Menambahkan...';
       const res = await fetch('/api/obs/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -322,10 +322,10 @@ async function patchCamera(id, data) {
       });
       const resData = await res.json();
       if (resData.success) {
-        e.target.textContent = resData.exists ? '[ Diperbarui di OBS ]' : '[ Berhasil Ditambahkan ]';
+        e.target.textContent = resData.exists ? 'Diperbarui di OBS' : 'Berhasil Ditambahkan';
       } else {
         alert('Gagal: ' + resData.error);
-        e.target.textContent = '[ + Tambah Otomatis ke OBS ]';
+        e.target.textContent = '+ Tambah Otomatis ke OBS';
         e.target.disabled = false;
       }
     };
@@ -425,25 +425,25 @@ function updateCameraUI(id, data) {
       card.classList.add('offline');
       if (badgeTag) {
         badgeTag.className = 'status-badge-tag standby';
-        badgeTag.textContent = '[ OFF ]';
+        badgeTag.textContent = 'OFF';
       }
     } else {
       if (data.tally === 2) {
         card.classList.add('program');
         if (badgeTag) {
           badgeTag.className = 'status-badge-tag program';
-          badgeTag.textContent = '[ PROGRAM ]';
+          badgeTag.textContent = 'PROGRAM';
         }
       } else if (data.tally === 1) {
         card.classList.add('preview');
         if (badgeTag) {
           badgeTag.className = 'status-badge-tag preview';
-          badgeTag.textContent = '[ PREVIEW ]';
+          badgeTag.textContent = 'PREVIEW';
         }
       } else {
         if (badgeTag) {
           badgeTag.className = 'status-badge-tag standby';
-          badgeTag.textContent = '[ STANDBY ]';
+          badgeTag.textContent = 'STANDBY';
         }
       }
     }
@@ -460,7 +460,7 @@ function updateCameraUI(id, data) {
       card.classList.remove('program', 'preview');
       if (badgeTag) {
         badgeTag.className = 'status-badge-tag standby';
-        badgeTag.textContent = '[ OFF ]';
+        badgeTag.textContent = 'OFF';
       }
       if (btnDelete) btnDelete.style.display = 'block';
       if (btnDisconnect) btnDisconnect.style.display = 'none';
@@ -513,8 +513,8 @@ function updateCameraUI(id, data) {
     const bit = data.lastTelemetry.bitrate ? (data.lastTelemetry.bitrate / 1000000).toFixed(1) : '0.0';
     const fps = data.lastTelemetry.fps || 0;
     
-    document.getElementById(`tel-res-${id}`).innerText = `[ 1080p${fps} ]`;
-    document.getElementById(`tel-bit-${id}`).innerText = `[ ${bit} Mbps ]`;
+    document.getElementById(`tel-res-${id}`).innerText = `1080p${fps}`;
+    document.getElementById(`tel-bit-${id}`).innerText = `${bit} Mbps`;
 
     const isMuted = data.lastTelemetry.isMuted;
     const audioLvl = data.lastTelemetry.audioLevel || 0;
@@ -536,7 +536,7 @@ function updateCameraUI(id, data) {
   updateSummaryCounters();
 }
 
-function removeCamera(id) {
+function removeCamera(id) { console.log('removeCamera called for', id); 
   const card = cameras.get(id);
   if (card) {
     card.remove();
@@ -581,7 +581,7 @@ btnAdd.onclick = async () => {
   } catch (err) {
     alert('Gagal membuat QR');
   }
-  btnAdd.innerText = '[ Buat QR Code Baru ]';
+  btnAdd.innerText = 'Buat QR Code Baru';
   btnAdd.disabled = false;
 };
 

@@ -272,7 +272,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
       return el ? el.innerText : '';
     });
     console.log('Sender muted text:', senderAudioMuted);
-    assert(senderAudioMuted.includes('[MUTE]'), 'Audio meter must show [MUTE] label');
+    assert(senderAudioMuted.includes('MUTE'), 'Audio meter must show MUTE label');
 
     // -- Resilience (c): Wake Lock visibility -----------------------
     console.log('Testing Wake Lock on visibility change...');
@@ -448,7 +448,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     console.error('\n[FAIL] E2E Test Failed:', err.message);
     try {
       const html = await dashboard.evaluate(() => document.body.innerHTML);
-      console.log('DASHBOARD HTML DUMP:\n', html.substring(0, 3000));
+      console.log('DASHBOARD HTML DUMP:\n', html);
     } catch (e) {}
     exitCode = 1;
   } finally {
