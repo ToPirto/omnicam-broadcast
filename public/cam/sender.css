@@ -44,73 +44,54 @@ video {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1); /* mirror by default, will remove for back cam */
+  transform: scaleX(-1); /* mirror by default, removed for back cam */
 }
 
+/* Two-Column Header Layout */
 .hud-top {
-  position: absolute; top: 0; left: 0; right: 0; padding: 15px; 
-  background: linear-gradient(rgba(0,0,0,0.8), transparent);
-  display: flex; justify-content: space-between; z-index: 20;
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 8px 16px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+  display: flex; justify-content: space-between; align-items: center;
+  z-index: 20;
   white-space: nowrap; flex-wrap: nowrap; overflow: hidden;
+  width: 100%; box-sizing: border-box;
 }
+
+.top-left {
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0; flex-shrink: 1; overflow: hidden;
+}
+
+.brand-logo { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.brand-logo-text { font-family: sans-serif; font-weight: 900; font-size: 15px; letter-spacing: 2px; color: #fff; text-transform: uppercase; }
+.brand-pill { background: #2a2a32; border: 1px solid #444; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 9px; letter-spacing: 1px; color: #34c759; font-weight: bold; }
+.brand-divider { color: #33333a; font-family: monospace; font-weight: bold; flex-shrink: 0; }
+
+.cam-name { font-weight: bold; font-family: sans-serif; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.tally-led-dot { width: 8px; height: 8px; border-radius: 50%; background: #33333a; flex-shrink: 0; transition: background-color 0.2s, box-shadow 0.2s; }
+.tally-led-dot.program { background: #ff3b30; box-shadow: 0 0 6px #ff3b30; }
+.tally-led-dot.preview { background: #34c759; box-shadow: 0 0 6px #34c759; }
+.tally-led-dot.standby { background: #33333a; }
+
+.top-right {
+  display: flex; align-items: center; gap: 12px;
+  flex-shrink: 0; margin-left: 15px;
+}
+
+.mono-text { font-family: monospace; font-size: 13px; font-weight: bold; }
+
 .hud-bottom {
   position: absolute; bottom: 0; left: 0; right: 0; padding: 15px;
-  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+  background: linear-gradient(transparent, rgba(0,0,0,0.85));
   display: flex; flex-direction: column; gap: 10px; z-index: 20;
 }
-.setup-panel {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; z-index: 25;
-  display: flex; flex-direction: column; gap: 10px; text-align: center;
-}
-.top-left, .top-right { display: flex; align-items: center; gap: 15px; min-width: 0; }
-.cam-name { font-weight: bold; font-family: sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
-.status-dot { width: 10px; height: 10px; border-radius: 50%; background: #8e8e93; }
-.status-dot.live { background: #ff3b30; box-shadow: 0 0 8px #ff3b30; }
-.mono-text { font-family: monospace; font-size: 14px; font-weight: bold; }
-.monitor-bar { display: flex; align-items: center; gap: 20px; }
-.action-buttons { display: flex; gap: 10px; }
-.btn-flat { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 16px; font-family: sans-serif; font-weight: bold; cursor: pointer; border-radius: 4px; }
-.btn-flat.btn-danger { background: rgba(255,59,48,0.2); border-color: #ff3b30; color: #ff3b30; }
 
-.setup-panel button, .setup-panel select {
-  padding: 10px;
-  background: #333;
-  color: white;
-  border: 1px solid #555;
-  border-radius: 5px;
-  font-size: 1em;
-}
-
-/* Brand Logo & LED Meter */
-.brand-logo { display: flex; align-items: center; gap: 8px; }
-.brand-logo-text { font-family: sans-serif; font-weight: 900; font-size: 16px; letter-spacing: 4px; color: #fff; text-transform: uppercase; }
-.brand-pill { background: #1a1a1a; border: 1px solid #333; padding: 2px 6px; border-radius: 12px; font-family: monospace; font-size: 8px; letter-spacing: 1px; color: #aaa; }
-.brand-dot { width: 6px; height: 6px; background: #ff3b30; border-radius: 50%; box-shadow: 0 0 4px #ff3b30; }
-
-.led-meter-container { display: flex; gap: 2px; align-items: center; background: #111115; padding: 4px; border-radius: 4px; border: 1px solid #000; box-shadow: inset 0 2px 4px rgba(0,0,0,0.8); width: fit-content; }
-.led-segment { width: 6px; height: 14px; background: #1e1e24; border-radius: 2px; transition: background-color 0.1s; }
-.led-text { font-family: monospace; font-size: 10px; font-weight: bold; margin-right: 6px; color: #8e8e93; min-width: 35px; text-align: center; }
-.led-segment.active-green { background: #34c759; box-shadow: 0 0 4px #34c759; }
-.led-segment.active-yellow { background: #ffd600; box-shadow: 0 0 4px #ffd600; }
-.led-segment.active-red { background: #ff3b30; box-shadow: 0 0 4px #ff3b30; }
-
-/* Grid Overlay */
-.grid-overlay {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  pointer-events: none;
-  z-index: 5;
-  background-image: 
-    linear-gradient(to right, transparent 33.33%, rgba(255,255,255,0.15) 33.33%, rgba(255,255,255,0.15) 33.43%, transparent 33.43%, transparent 66.66%, rgba(255,255,255,0.15) 66.66%, rgba(255,255,255,0.15) 66.76%, transparent 66.76%),
-    linear-gradient(to bottom, transparent 33.33%, rgba(255,255,255,0.15) 33.33%, rgba(255,255,255,0.15) 33.5%, transparent 33.5%, transparent 66.66%, rgba(255,255,255,0.15) 66.66%, rgba(255,255,255,0.15) 66.8%, transparent 66.8%);
-}
-
-/* Sony-Style Battery */
+/* Sony-Style Battery (NO outer box) */
 .battery-container { display: flex; align-items: center; gap: 4px; }
 .battery-body {
-  width: 24px;
-  height: 12px;
+  width: 22px;
+  height: 11px;
   border: 1px solid #aaa;
   border-radius: 2px;
   padding: 1px;
@@ -124,11 +105,9 @@ video {
   border-radius: 1px;
   transition: width 0.3s, background-color 0.3s;
 }
-.battery-level.yellow { background-color: #ffd600; }
-.battery-level.red { background-color: #ff3b30; }
 .battery-nipple {
   width: 2px;
-  height: 6px;
+  height: 5px;
   background: #aaa;
   border-radius: 0 1px 1px 0;
 }
@@ -141,89 +120,145 @@ video {
   border: 1px solid #2a2a32;
   color: #ddd;
   padding: 4px 8px;
-  border-radius: 4px; /* Changed from 12px to 4px */
+  border-radius: 4px;
   font-family: monospace;
   font-size: 11px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
 }
 .hud-badge.live { color: #34c759; border-color: #34c759; }
 .hud-badge.drop { color: #ffd600; border-color: #ffd600; }
 
-/* Pro Menu Panel */
-.btn-menu { padding: 4px 10px; font-size: 12px; border-color: #555; }
+/* Slide-Over Pro Camera Drawer */
 .pro-menu-panel {
-  position: absolute;
-  top: 60px; right: 15px;
-  background: rgba(15, 15, 20, 0.95);
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 15px;
-  width: 250px;
-  z-index: 30;
+  position: fixed;
+  top: 0; right: 0;
+  width: 320px;
+  max-width: 85vw;
+  height: 100vh;
+  background: rgba(16, 16, 20, 0.96);
+  backdrop-filter: blur(12px);
+  border-left: 1px solid #2a2a32;
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 2000;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  gap: 16px;
+  box-shadow: -4px 0 25px rgba(0,0,0,0.8);
 }
-.menu-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; font-family: sans-serif; }
-.menu-item { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-family: sans-serif; }
-.menu-item select { background: #222; color: #fff; border: 1px solid #444; padding: 4px; border-radius: 4px; max-width: 120px; }
-.menu-item-audio { display: flex; gap: 10px; font-size: 12px; justify-content: space-around; margin-top: 5px; }
+
+.menu-header {
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid #2a2a32; padding-bottom: 12px;
+  font-family: sans-serif; font-size: 14px; font-weight: bold; letter-spacing: 1px;
+}
+
+.btn-close-sq {
+  background: #2a2a32; border: 1px solid #444; color: #fff;
+  border-radius: 4px; padding: 4px 10px; font-family: monospace;
+  font-weight: bold; cursor: pointer; font-size: 12px;
+}
+.btn-close-sq:hover { background: #3a3a44; }
+
+.menu-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.menu-row-block { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.menu-label { font-family: sans-serif; font-weight: bold; color: #aaa; font-size: 11px; letter-spacing: 1px; }
+
+.menu-select {
+  width: 100%; background: #0a0a0c; color: #fff;
+  border: 1px solid #2a2a32; padding: 10px; border-radius: 4px;
+  font-size: 13px; font-family: sans-serif; box-sizing: border-box;
+}
+
+.btn-toggle-chip {
+  background: #0a0a0c; border: 1px solid #2a2a32; color: #34c759;
+  padding: 6px 14px; border-radius: 4px; font-family: monospace;
+  font-weight: bold; cursor: pointer; font-size: 12px;
+}
+
+.audio-chips-group { display: flex; gap: 8px; }
+.btn-audio-chip {
+  flex: 1; background: #0a0a0c; border: 1px solid #2a2a32; color: #8e8e93;
+  padding: 8px; border-radius: 4px; font-family: monospace; font-size: 12px;
+  font-weight: bold; cursor: pointer; text-align: center;
+}
+.btn-audio-chip.active {
+  background: rgba(52, 199, 89, 0.15); border-color: #34c759; color: #34c759;
+}
+
+/* Setup Landing Panel */
+.setup-panel {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: #0a0a0c; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.setup-card {
+  background: #16161a; padding: 30px; border-radius: 12px;
+  border: 1px solid #2a2a32; text-align: center;
+  max-width: 380px; width: 90%; box-sizing: border-box;
+}
+
+.setup-brand-title { margin: 0 0 4px 0; font-family: sans-serif; font-size: 20px; font-weight: 900; letter-spacing: 2px; }
+.setup-brand-sub { color: #8e8e93; margin: 0 0 25px 0; font-size: 13px; font-family: monospace; }
+.setup-field { margin-bottom: 18px; text-align: left; }
+.setup-label { display: block; color: #aaa; margin-bottom: 6px; font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+.setup-select { width: 100%; padding: 12px; background: #0a0a0c; border: 1px solid #2a2a32; color: #fff; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
+
+.btn-start-action {
+  width: 100%; padding: 15px; background: #34c759; color: #000;
+  border: none; border-radius: 4px; font-size: 15px; font-weight: bold;
+  cursor: pointer; text-transform: uppercase; margin-top: 10px;
+}
+.btn-start-action:hover { background: #30b852; }
+
+/* Buttons & Controls */
+.btn-flat { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 6px 12px; font-family: monospace; font-weight: bold; cursor: pointer; border-radius: 4px; font-size: 12px; }
+.btn-flat.btn-danger { background: rgba(255,59,48,0.2); border-color: #ff3b30; color: #ff3b30; }
+
+.monitor-bar { display: flex; align-items: center; gap: 15px; }
+.action-buttons { display: flex; gap: 10px; }
+
+/* Grid Overlay */
+.grid-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 5;
+  background-image: 
+    linear-gradient(to right, transparent 33.33%, rgba(255,255,255,0.15) 33.33%, rgba(255,255,255,0.15) 33.43%, transparent 33.43%, transparent 66.66%, rgba(255,255,255,0.15) 66.66%, rgba(255,255,255,0.15) 66.76%, transparent 66.76%),
+    linear-gradient(to bottom, transparent 33.33%, rgba(255,255,255,0.15) 33.33%, rgba(255,255,255,0.15) 33.5%, transparent 33.5%, transparent 66.66%, rgba(255,255,255,0.15) 66.66%, rgba(255,255,255,0.15) 66.8%, transparent 66.8%);
+}
+
+/* LED Meter */
+.led-meter-container { display: flex; gap: 2px; align-items: center; background: #111115; padding: 4px; border-radius: 4px; border: 1px solid #000; width: fit-content; }
+.led-segment { width: 6px; height: 14px; background: #1e1e24; border-radius: 2px; transition: background-color 0.1s; }
+.led-text { font-family: monospace; font-size: 10px; font-weight: bold; margin-right: 6px; color: #8e8e93; min-width: 35px; text-align: center; }
+.led-segment.active-green { background: #34c759; box-shadow: 0 0 4px #34c759; }
+.led-segment.active-yellow { background: #ffd600; box-shadow: 0 0 4px #ffd600; }
+.led-segment.active-red { background: #ff3b30; box-shadow: 0 0 4px #ff3b30; }
 
 /* Zoom Slider */
 .zoom-container {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  z-index: 20;
-  background: rgba(0,0,0,0.4);
-  padding: 10px 5px;
-  border-radius: 20px;
+  position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  z-index: 20; background: rgba(0,0,0,0.4); padding: 10px 5px; border-radius: 20px;
 }
 input[type=range][orient=vertical] {
-  writing-mode: bt-lr; /* IE */
-  -webkit-appearance: slider-vertical; /* WebKit */
-  width: 8px;
-  height: 150px;
-  padding: 0 5px;
+  writing-mode: bt-lr; -webkit-appearance: slider-vertical;
+  width: 8px; height: 150px; padding: 0 5px;
 }
 #zoom-text { font-size: 12px; }
 
 /* Focus Reticle */
 .focus-reticle {
-  position: absolute;
-  left: 50%; top: 50%;
-  transform: translate(-50%, -50%);
-  width: 60px;
-  height: 60px;
-  pointer-events: none;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 60px; height: 60px; pointer-events: none; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   transition: opacity 0.3s;
 }
 .reticle-box {
-  width: 100%; height: 100%;
-  border: 1.5px solid #ffd600;
-  box-sizing: border-box;
-  animation: pulse-border 1s infinite alternate;
+  width: 100%; height: 100%; border: 1.5px solid #34c759;
+  box-sizing: border-box; transition: border-color 0.2s;
 }
 .reticle-text {
-  position: absolute;
-  bottom: -20px;
-  color: #34c759;
-  font-family: monospace;
-  font-size: 12px;
-  font-weight: bold;
-}
-@keyframes pulse-border {
-  from { border-color: #ffd600; transform: scale(1); }
-  to { border-color: #34c759; transform: scale(0.9); }
+  position: absolute; bottom: -20px; color: #ffd600;
+  font-family: monospace; font-size: 11px; font-weight: bold;
 }

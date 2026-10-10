@@ -27,6 +27,10 @@ async function start() {
     logger: false
   });
 
+  fastify.addHook('onRequest', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  });
+
   fastify.register(fastifyStatic, {
     root: path.join(__dirname, '../public'),
     prefix: '/', 

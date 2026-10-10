@@ -9,13 +9,15 @@
     
     /* Header Bar */
     .dashboard-header {
-      background: #16161a; border: 1px solid #2a2a32; padding: 15px 20px;
+      background: #16161a; border: 1px solid #2a2a32; padding: 16px 20px;
       border-radius: 8px; margin-bottom: 20px;
       display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 15px;
     }
     
     .brand-logo { display: flex; align-items: center; gap: 12px; }
-    .brand-logo-text { font-family: sans-serif; font-weight: 900; font-size: 20px; letter-spacing: 4px; color: #fff; text-transform: uppercase; }
+    .brand-logo-text { font-family: sans-serif; font-weight: 900; font-size: 20px; letter-spacing: 3px; color: #fff; text-transform: uppercase; }
+    .brand-pill { background: #2a2a32; border: 1px solid #444; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 11px; letter-spacing: 1px; color: #34c759; font-weight: bold; }
     
     .meta-data { color: #8e8e93; font-family: monospace; font-size: 12px; margin-top: 4px; }
     
@@ -27,10 +29,18 @@
     .obs-badge.connected { color: #34c759; border-color: #34c759; }
     .obs-badge.disconnected { color: #ff3b30; border-color: #ff3b30; }
     
-    .summary-counters { display: flex; gap: 15px; font-family: monospace; font-size: 14px; }
-    .summary-item { display: flex; flex-direction: column; align-items: center; background: #000; padding: 8px 15px; border-radius: 4px; border: 1px solid #2a2a32; }
-    .summary-item span:last-child { font-weight: bold; font-size: 18px; margin-top: 4px; }
-    
+    /* Unified Studio Status Bar */
+    .studio-status-bar {
+      display: flex; align-items: center; gap: 15px;
+      background: #0a0a0c; border: 1px solid #2a2a32; padding: 8px 16px;
+      border-radius: 6px; font-family: monospace; font-size: 13px; color: #aaa;
+    }
+    .studio-status-item { display: flex; align-items: center; gap: 6px; }
+    .studio-status-val { font-weight: bold; color: #fff; font-size: 14px; }
+    .studio-status-val.program { color: #ff3b30; }
+    .studio-status-val.preview { color: #34c759; }
+    .status-divider { color: #33333a; }
+
     .global-actions { display: flex; gap: 10px; }
     
     .btn { background: #2a2a32; color: white; border: 1px solid #444; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-weight: bold; font-size: 12px; }
@@ -39,18 +49,18 @@
     .btn-red { background: rgba(255, 59, 48, 0.2); color: #ff3b30; border-color: #ff3b30; }
 
     /* Grid */
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
     
     /* Cards */
     .card { background: #16161a; border-radius: 8px; padding: 15px; border: 2px solid #2a2a32; display: flex; flex-direction: column; transition: border-color 0.2s; }
     .card.program { border-color: #ff3b30; }
     .card.preview { border-color: #34c759; }
-    .card.offline { border-color: #33333a; opacity: 0.8; }
+    .card.offline { border-color: #33333a; opacity: 0.85; }
     
     .card.add-cam { align-items: center; justify-content: center; text-align: center; border-style: dashed; }
     #qr-container { background: #fff; padding: 10px; border-radius: 8px; margin-top: 15px; display: inline-block; }
     #qr-container img { max-width: 200px; display: block; margin: 0 auto; }
-    .qr-instruction { font-size: 0.9em; color: #aaa; margin-top: 15px; max-width: 200px; line-height: 1.4; }
+    .qr-instruction { font-size: 0.9em; color: #aaa; margin-top: 15px; max-width: 220px; line-height: 1.4; }
     .qr-url { margin-top: 10px; color: #4da6ff; font-family: monospace; font-size: 12px; word-break: break-all; }
 
     /* LED Meter */
@@ -73,16 +83,27 @@
     .battery-body { width: 20px; height: 10px; border: 1px solid #aaa; border-radius: 2px; padding: 1px; position: relative; background: rgba(0,0,0,0.5); }
     .battery-level { height: 100%; width: 0%; background-color: #34c759; border-radius: 1px; transition: width 0.3s, background-color 0.3s; }
     .battery-nipple { width: 2px; height: 4px; background: #aaa; border-radius: 0 1px 1px 0; }
+    
+    .status-badge-tag { font-family: monospace; font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 4px; border: 1px solid #2a2a32; }
+    .status-badge-tag.program { color: #ff3b30; border-color: #ff3b30; background: rgba(255, 59, 48, 0.15); box-shadow: 0 0 6px rgba(255,59,48,0.4); }
+    .status-badge-tag.preview { color: #34c759; border-color: #34c759; background: rgba(52, 199, 89, 0.15); }
+    .status-badge-tag.standby { color: #8e8e93; border-color: #33333a; background: #0a0a0c; }
   </style>
 </head>
 <body>
   
   <!-- OBS Settings Modal -->
-  <div id="obs-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:9999; align-items:center; justify-content:center;">
-    <div style="background:#16161a; padding:20px; border-radius:8px; border:1px solid #2a2a32; width: 350px;">
-      <h3 style="margin-top:0;">Pengaturan OBS WebSocket</h3>
-      <input type="text" id="obs-url" placeholder="ws://127.0.0.1:4455" style="width:100%; padding:10px; margin-bottom:10px; background:#0a0a0c; border:1px solid #2a2a32; color:#fff; box-sizing:border-box; border-radius:4px;">
-      <input type="password" id="obs-pwd" placeholder="Password" style="width:100%; padding:10px; margin-bottom:15px; background:#0a0a0c; border:1px solid #2a2a32; color:#fff; box-sizing:border-box; border-radius:4px;">
+  <div id="obs-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#16161a; padding:24px; border-radius:8px; border:1px solid #2a2a32; width: 360px;">
+      <h3 style="margin-top:0; font-size: 16px; letter-spacing: 1px;">PENGATURAN OBS WEBSOCKET</h3>
+      <div style="margin-bottom: 12px;">
+        <label style="display:block; font-size: 12px; color: #aaa; margin-bottom: 4px; font-family: monospace;">OBS WebSocket URL</label>
+        <input type="text" id="obs-url" placeholder="ws://127.0.0.1:4455" style="width:100%; padding:10px; background:#0a0a0c; border:1px solid #2a2a32; color:#fff; box-sizing:border-box; border-radius:4px; font-family: monospace;">
+      </div>
+      <div style="margin-bottom: 20px;">
+        <label style="display:block; font-size: 12px; color: #aaa; margin-bottom: 4px; font-family: monospace;">Password</label>
+        <input type="password" id="obs-pwd" placeholder="Password" style="width:100%; padding:10px; background:#0a0a0c; border:1px solid #2a2a32; color:#fff; box-sizing:border-box; border-radius:4px; font-family: monospace;">
+      </div>
       <div style="display:flex; justify-content:space-between;">
         <button class="btn" id="btn-close-modal">Batal</button>
         <button class="btn btn-green" id="btn-save-settings">Simpan</button>
@@ -93,50 +114,54 @@
   <div class="dashboard-header">
     <div>
       <div class="brand-logo">
-        <div class="brand-logo-text">OMNICAM BROADCAST</div>
+        <div class="brand-logo-text">OMNICAM</div>
+        <div class="brand-pill">BROADCAST</div>
       </div>
       <div class="meta-data">
-        Server: <span id="server-url"></span> | OBS Port: <span id="obs-port">3001</span>
-      </div>
-    </div>
-    
-    <div class="summary-counters">
-      <div class="summary-item">
-        <span>TOTAL KAMERA</span>
-        <span id="count-total">0</span>
-      </div>
-      <div class="summary-item" style="color: #ff3b30; border-color: rgba(255,59,48,0.3);">
-        <span>LIVE (PROGRAM)</span>
-        <span id="count-program">0</span>
-      </div>
-      <div class="summary-item" style="color: #34c759; border-color: rgba(52,199,89,0.3);">
-        <span>STANDBY (PREVIEW)</span>
-        <span id="count-preview">0</span>
+        Server IP: <span id="server-url"></span> | OBS Port: <span id="obs-port">3001</span>
       </div>
     </div>
 
-    <div style="display: flex; gap: 15px; align-items: center;">
+    <!-- Unified Studio Status Bar -->
+    <div class="studio-status-bar">
+      <div class="studio-status-item">
+        <span>TOTAL KAMERA:</span>
+        <span class="studio-status-val" id="count-total">0</span>
+      </div>
+      <span class="status-divider">|</span>
+      <div class="studio-status-item">
+        <span>LIVE (PROGRAM):</span>
+        <span class="studio-status-val program" id="count-program">0</span>
+      </div>
+      <span class="status-divider">|</span>
+      <div class="studio-status-item">
+        <span>STANDBY (PREVIEW):</span>
+        <span class="studio-status-val preview" id="count-preview">0</span>
+      </div>
+      <span class="status-divider">|</span>
+      <button class="btn" id="btn-mute-all" style="padding: 4px 8px; font-size: 11px;">[ MUTE ALL ]</button>
+      <span class="status-divider">|</span>
+      <button class="btn" id="btn-refresh" style="padding: 4px 8px; font-size: 11px;">[ REFRESH ]</button>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center;">
       <div class="obs-badge disconnected" id="obs-badge">
-        <span id="obs-status-text">[ OBS TERPUTUS ]</span>
-        <button class="btn" id="btn-obs-reconnect" style="padding: 4px 8px; font-size: 10px; margin-left: 10px;">[ RECONNECT ]</button>
+        <span id="obs-status-text">[ OBS: TERPUTUS ]</span>
       </div>
-      
-      <div class="global-actions">
-        <!-- Optional global mute later -->
-        <button class="btn" id="btn-refresh">[ REFRESH ]</button>
-      </div>
+      <button class="btn" id="btn-obs-modal-open">[ PENGATURAN OBS ]</button>
+      <button class="btn" id="btn-obs-reconnect">[ RECONNECT ]</button>
     </div>
   </div>
 
   <div class="grid" id="cam-grid">
     <div class="card add-cam">
-      <h3 style="margin-top:0;">Tambah Kamera</h3>
-      <button class="btn btn-green" id="btn-add">Buat QR Code Baru</button>
+      <h3 style="margin-top:0; font-size: 16px; letter-spacing: 1px;">TAMBAH KAMERA</h3>
+      <button class="btn btn-green" id="btn-add">[ Buat QR Code Baru ]</button>
       <div id="qr-container"></div>
       <div class="qr-instruction">Scan menggunakan Google Chrome di Wi-Fi yang sama</div>
     </div>
   </div>
 
-  <script type="module" src="/dashboard/dashboard.js"></script>
+  <script type="module" src="/dashboard/dashboard.js?v=3.0"></script>
 </body>
 </html>

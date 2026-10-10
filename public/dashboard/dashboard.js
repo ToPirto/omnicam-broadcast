@@ -8,8 +8,12 @@ const btnAdd = document.getElementById('btn-add');
 const qrContainer = document.getElementById('qr-container');
 
 const obsModal = document.getElementById('obs-modal');
+const btnObsModalOpen = document.getElementById('btn-obs-modal-open');
+if (btnObsModalOpen) {
+  btnObsModalOpen.onclick = () => { obsModal.style.display = 'flex'; };
+}
 document.getElementById('btn-obs-reconnect').onclick = () => {
-  obsModal.style.display = 'flex';
+  loadSettings();
 };
 document.getElementById('btn-close-modal').onclick = () => {
   obsModal.style.display = 'none';
@@ -27,20 +31,22 @@ function updateObsStatus(connected) {
   if (badge && text) {
     if (connected) {
       badge.className = 'obs-badge connected';
-      text.innerText = '[ OBS TERHUBUNG ]';
+      text.innerText = '[ OBS: TERHUBUNG ]';
     } else {
       badge.className = 'obs-badge disconnected';
-      text.innerText = '[ OBS TERPUTUS ]';
+      text.innerText = '[ OBS: TERPUTUS ]';
     }
   }
 }
 
 async function loadSettings() {
-  const res = await fetch('/api/settings');
-  const data = await res.json();
-  document.getElementById('obs-url').value = data.obsWsUrl || '';
-  document.getElementById('obs-pwd').value = data.passwordSaved ? '********' : '';
-  updateObsStatus(data.obsConnected);
+  try {
+    const res = await fetch('/api/settings');
+    const data = await res.json();
+    document.getElementById('obs-url').value = data.obsWsUrl || '';
+    document.getElementById('obs-pwd').value = data.passwordSaved ? '********' : '';
+    updateObsStatus(data.obsConnected);
+  } catch(e) {}
 }
 
 document.getElementById('btn-save-settings').onclick = async () => {
@@ -65,6 +71,17 @@ document.getElementById('btn-save-settings').onclick = async () => {
 document.getElementById('btn-refresh').onclick = () => {
   loadCamerasSnapshot();
 };
+
+const btnMuteAll = document.getElementById('btn-mute-all');
+if (btnMuteAll) {
+  btnMuteAll.onclick = () => {
+    cameras.forEach((card, id) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(createEnvelope('cam_mute', 'dashboard', id, { mute: true })));
+      }
+    });
+  };
+}
 
 loadSettings();
 
@@ -223,8 +240,11 @@ async function patchCamera(id, data) {
 
     div.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <div style="font-weight: bold; font-size: 18px;" id="name-${id}"></div>
-        <button id="btn-rename-${id}" class="btn" style="padding: 4px 8px; font-size: 10px;">[ UBAH ]</button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-weight: bold; font-size: 18px;" id="name-${id}"></div>
+          <button id="btn-rename-${id}" class="btn" style="padding: 2px 6px; font-size: 10px;">[ Ubah ]</button>
+        </div>
+        <div id="badge-tag-${id}" class="status-badge-tag standby">[ STANDBY ]</div>
       </div>
       
       <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; border-radius: 4px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; display: none;">
@@ -397,13 +417,35 @@ function updateCameraUI(id, data) {
     document.getElementById(`name-${id}`).textContent = data.name || `CAM ${id.substring(0, 4)}`;
   }
   
+  const badgeTag = document.getElementById(`badge-tag-${id}`);
+
   if (data.tally !== undefined) {
     card.classList.remove('program', 'preview', 'offline');
     if (data.status === 'offline') {
       card.classList.add('offline');
+      if (badgeTag) {
+        badgeTag.className = 'status-badge-tag standby';
+        badgeTag.textContent = '[ OFF ]';
+      }
     } else {
-      if (data.tally === 2) card.classList.add('program');
-      else if (data.tally === 1) card.classList.add('preview');
+      if (data.tally === 2) {
+        card.classList.add('program');
+        if (badgeTag) {
+          badgeTag.className = 'status-badge-tag program';
+          badgeTag.textContent = '[ PROGRAM ]';
+        }
+      } else if (data.tally === 1) {
+        card.classList.add('preview');
+        if (badgeTag) {
+          badgeTag.className = 'status-badge-tag preview';
+          badgeTag.textContent = '[ PREVIEW ]';
+        }
+      } else {
+        if (badgeTag) {
+          badgeTag.className = 'status-badge-tag standby';
+          badgeTag.textContent = '[ STANDBY ]';
+        }
+      }
     }
   }
 
@@ -416,6 +458,10 @@ function updateCameraUI(id, data) {
     if (data.status === 'offline') {
       card.classList.add('offline');
       card.classList.remove('program', 'preview');
+      if (badgeTag) {
+        badgeTag.className = 'status-badge-tag standby';
+        badgeTag.textContent = '[ OFF ]';
+      }
       if (btnDelete) btnDelete.style.display = 'block';
       if (btnDisconnect) btnDisconnect.style.display = 'none';
       if (placeholder) {
@@ -535,7 +581,7 @@ btnAdd.onclick = async () => {
   } catch (err) {
     alert('Gagal membuat QR');
   }
-  btnAdd.innerText = 'Buat QR Code Baru';
+  btnAdd.innerText = '[ Buat QR Code Baru ]';
   btnAdd.disabled = false;
 };
 
