@@ -143,13 +143,134 @@ if (!isNode) {
     }
   }
 
+  const i18n = {
+    id: {
+      proSettings: 'Pengaturan Pro',
+      language: 'Bahasa',
+      lens: 'Lensa',
+      resolution: 'Resolusi',
+      grid: 'Grid 3x3',
+      startCam: 'Mulai Kamera',
+      rescanQr: 'Scan Ulang QR',
+      disconnect: 'PUTUS',
+      mute: 'MUTE',
+      unmute: 'UNMUTE',
+      batterySaver: '[BATTERY SAVER]',
+      fullscreen: 'Layar Penuh / Kunci Landscape',
+      holdToWake: 'Tahan 2 detik untuk bangun',
+      waiting: 'Menunggu...',
+      signaling: 'Menghubungkan (Signaling)...',
+      authWait: 'Terautentikasi (Menunggu Viewer)',
+      live: 'WebRTC Terhubung (Live)',
+      reconnecting: 'Terputus, menyambungkan ulang...',
+      disconnectedMsg: 'Terputus. Scan QR untuk menyambung lagi',
+      camDenied: 'Izin kamera ditolak atau kamera tidak tersedia.',
+      camDefault: 'Kamera',
+      landscapeFail: 'Gagal mengunci landscape. Aktifkan Putar Otomatis di HP dan putar HP Anda secara manual.',
+      badgeLive: '[ LIVE ]',
+      badgeDrop: '[ DROP ]'
+    },
+    en: {
+      proSettings: 'Pro Settings',
+      language: 'Language',
+      lens: 'Lens',
+      resolution: 'Resolution',
+      grid: '3x3 Grid',
+      startCam: 'Start Camera',
+      rescanQr: 'Rescan QR',
+      disconnect: 'DISCONNECT',
+      mute: 'MUTE',
+      unmute: 'UNMUTE',
+      batterySaver: '[BATTERY SAVER]',
+      fullscreen: 'Fullscreen / Lock Landscape',
+      holdToWake: 'Hold 2 seconds to wake',
+      waiting: 'Waiting...',
+      signaling: 'Connecting (Signaling)...',
+      authWait: 'Authenticated (Waiting for Viewer)',
+      live: 'WebRTC Connected (Live)',
+      reconnecting: 'Disconnected, reconnecting...',
+      disconnectedMsg: 'Disconnected. Scan QR to reconnect',
+      camDenied: 'Camera permission denied or not available.',
+      camDefault: 'Camera',
+      landscapeFail: 'Failed to lock landscape. Enable Auto-Rotate and rotate your phone.',
+      badgeLive: '[ LIVE ]',
+      badgeDrop: '[ DROP ]'
+    }
+  };
+
+  currentLang = localStorage.getItem('omnicam_lang') || 'id';
+
+  function updateLanguage() {
+    localStorage.setItem('omnicam_lang', currentLang);
+    const t = i18n[currentLang];
+    
+    // Update elements if they exist
+    document.querySelectorAll('.lang-id, .lang-en').forEach(el => el.style.display = 'none');
+    
+    // Pro menu
+    const proMenu = document.querySelector('.menu-header strong');
+    if (proMenu) proMenu.innerText = t.proSettings;
+    
+    const menuItems = document.querySelectorAll('.menu-item');
+    if (menuItems.length >= 4) {
+      menuItems[0].childNodes[1].textContent = t.language;
+      menuItems[1].childNodes[1].textContent = t.grid;
+      menuItems[2].childNodes[1].textContent = t.lens;
+      menuItems[3].childNodes[1].textContent = t.resolution;
+    }
+
+    if (btnLangToggle) btnLangToggle.innerText = currentLang.toUpperCase();
+    if (btnFullscreen) btnFullscreen.innerText = t.fullscreen;
+    
+    if (btnDisconnect && !intentionalDisconnect) btnDisconnect.innerText = t.disconnect;
+    const btnMute = document.getElementById('btn-mute');
+    if (btnMute) btnMute.innerText = isMuted ? t.unmute : t.mute;
+    if (btnPowersave) btnPowersave.innerText = t.batterySaver;
+    
+    const holdEl = document.querySelector('#powersave-overlay div:nth-child(3)');
+    if (holdEl) holdEl.innerText = t.holdToWake;
+
+    // Status logic translation updating
+    if (statusEl) {
+       // Only translate if it matches one of our known states
+       const s = statusEl.innerHTML;
+       if (s.includes('Menunggu') || s.includes('Waiting')) statusEl.innerHTML = t.waiting;
+       else if (s.includes('Signaling')) statusEl.innerHTML = t.signaling;
+       else if (s.includes('Terautentikasi') || s.includes('Authenticated')) statusEl.innerHTML = t.authWait;
+       else if (s.includes('WebRTC')) updateStatusBadge(true); // Handled by updateStatusBadge
+       else if (s.includes('menyambung') || s.includes('reconnecting')) statusEl.innerHTML = t.reconnecting;
+       else if (s.includes('Terputus.') || s.includes('Disconnected.')) statusEl.innerHTML = `<span style="color:red">${t.disconnectedMsg}</span>`;
+    }
+
+    if (btnStart) {
+      if (btnStart.innerText.includes('Mulai') || btnStart.innerText.includes('Start')) {
+        btnStart.innerText = t.startCam;
+      } else {
+        btnStart.innerText = t.rescanQr;
+      }
+    }
+  }
+  
+  function updateStatusBadge(isLive) {
+    const t = i18n[currentLang];
+    if (statusEl) {
+      if (isLive) {
+        statusEl.innerHTML = `<div class="hud-badge live">${t.badgeLive}</div>`;
+      } else {
+        statusEl.innerHTML = `<div class="hud-badge drop">${t.badgeDrop}</div>`;
+      }
+    }
+  }
+  window.updateStatusBadge = updateStatusBadge;
+  window.i18n = i18n;
+
+  // Initial translation
+  updateLanguage();
+
   if (btnLangToggle) {
     btnLangToggle.onclick = () => {
       currentLang = currentLang === 'id' ? 'en' : 'id';
-      btnLangToggle.innerText = currentLang === 'id' ? 'ID' : 'EN';
-      document.querySelectorAll('.lang-id').forEach(el => el.style.display = currentLang === 'id' ? '' : 'none');
-      document.querySelectorAll('.lang-en').forEach(el => el.style.display = currentLang === 'en' ? '' : 'none');
-      if (btnFullscreen) btnFullscreen.innerText = currentLang === 'id' ? 'Layar Penuh / Kunci Landscape' : 'Fullscreen / Lock Landscape';
+      updateLanguage();
     };
   }
 
@@ -171,9 +292,23 @@ if (!isNode) {
       focusReticle.style.left = (x - rect.left) + 'px';
       focusReticle.style.top = (y - rect.top) + 'px';
       focusReticle.style.display = 'flex';
+      focusReticle.style.opacity = '1';
+      
+      if (localStream) {
+        const track = localStream.getVideoTracks()[0];
+        if (track && track.getCapabilities) {
+          const caps = track.getCapabilities();
+          if (caps.focusMode && caps.focusMode.includes('continuous')) {
+            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(e => console.warn('AF failed', e));
+          }
+        }
+      }
       
       clearTimeout(focusTimer);
-      focusTimer = setTimeout(() => { focusReticle.style.display = 'none'; }, 2000);
+      focusTimer = setTimeout(() => { 
+        focusReticle.style.opacity = '0'; 
+        setTimeout(() => { focusReticle.style.display = 'none'; }, 300);
+      }, 1200);
     };
     videoContainer.addEventListener('mousedown', triggerFocus);
     videoContainer.addEventListener('touchstart', triggerFocus);
@@ -274,7 +409,7 @@ async function startCamera(deviceId = null) {
     });
   } catch (err) {
     console.error('Camera error', err);
-    alert('Izin kamera ditolak atau kamera tidak tersedia.');
+    alert(window.i18n[currentLang].camDenied);
     throw err;
   }
 }
@@ -286,7 +421,7 @@ async function populateCameras() {
   videoDevices.forEach((d, i) => {
     const opt = document.createElement('option');
     opt.value = d.deviceId;
-    opt.text = d.label || `Kamera ${i + 1}`;
+    opt.text = d.label || `${window.i18n[currentLang].camDefault} ${i + 1}`;
     camSelect.appendChild(opt);
   });
   if (videoDevices.length > 0 && !currentDeviceId) {
@@ -321,7 +456,7 @@ if (!isNode) {
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal mengunci landscape. Aktifkan Putar Otomatis di HP dan putar HP Anda secara manual.');
+      alert(window.i18n[currentLang].landscapeFail);
     }
   };
 
@@ -415,14 +550,9 @@ if (!isNode) {
     const setupPanel = document.getElementById('setup-panel');
     if (setupPanel) setupPanel.style.display = 'flex';
     btnStart.style.display = 'inline-block';
-    btnStart.innerText = 'Scan Ulang QR';
+    btnStart.innerText = window.i18n[currentLang].rescanQr;
     btnStart.onclick = () => window.location.href = '/';
-    
-    statusEl.innerHTML = `<span style="color: red;" class="lang-id">Terputus. Scan QR untuk menyambung lagi</span><span style="color: red; display:none;" class="lang-en">Disconnected. Scan QR to reconnect</span>`;
-    if (currentLang === 'en') {
-      statusEl.querySelector('.lang-id').style.display = 'none';
-      statusEl.querySelector('.lang-en').style.display = '';
-    }
+    statusEl.innerHTML = `<span style="color: red;">${window.i18n[currentLang].disconnectedMsg}</span>`;
     stopTelemetry();
   };
 }
@@ -434,11 +564,8 @@ function startConnection() {
   ws.onopen = () => {
     reconnectAttempts = 0;
     console.log('WS state: onopen');
-    statusEl.innerHTML = `<span class="lang-id">Menghubungkan (Signaling)...</span><span class="lang-en" style="display:none;">Connecting (Signaling)...</span>`;
-    if (currentLang === 'en') {
-      statusEl.querySelector('.lang-id').style.display = 'none';
-      statusEl.querySelector('.lang-en').style.display = '';
-    }
+    statusEl.innerHTML = window.i18n[currentLang].signaling;
+    
     ws.send(JSON.stringify(createEnvelope('auth', camId, 'server', { token, sessionToken })));
   };
 
@@ -447,11 +574,8 @@ function startConnection() {
     
     if (msg.type === 'auth_ok') {
       console.log('WS state: auth_ok');
-      statusEl.innerHTML = `<span class="lang-id">Terautentikasi (Menunggu Viewer)</span><span class="lang-en" style="display:none;">Authenticated (Waiting for Viewer)</span>`;
-      if (currentLang === 'en') {
-        statusEl.querySelector('.lang-id').style.display = 'none';
-        statusEl.querySelector('.lang-en').style.display = '';
-      }
+      statusEl.innerHTML = window.i18n[currentLang].authWait;
+      
       camId = msg.payload.camId;
       if (msg.payload.name) {
         const nameEl = document.getElementById('cam-name-display');
@@ -462,7 +586,7 @@ function startConnection() {
       sessionStorage.setItem('omnicam_id', camId);
     } else if (msg.type === 'auth_fail') {
       console.error('Auth failed:', msg.payload.reason);
-      if (statusEl) statusEl.innerHTML = `<span style="color: red;">Gagal: ${msg.payload.reason}. Harap scan QR baru.</span>`;
+      if (statusEl) statusEl.innerHTML = `<span style="color: red;">${currentLang === 'en' ? 'Failed:' : 'Gagal:'} ${msg.payload.reason}. ${currentLang === 'en' ? 'Please scan new QR.' : 'Harap scan QR baru.'}</span>`;
       const setupPanel = document.getElementById('setup-panel');
       if (setupPanel) setupPanel.style.display = 'flex';
       btnStart.style.display = 'inline-block';
@@ -529,11 +653,8 @@ function startConnection() {
       console.log('Intentional disconnect, not reconnecting.');
       return;
     }
-    statusEl.innerHTML = `<span class="lang-id">Terputus, menyambungkan ulang...</span><span class="lang-en" style="display:none;">Disconnected, reconnecting...</span>`;
-    if (currentLang === 'en') {
-      statusEl.querySelector('.lang-id').style.display = 'none';
-      statusEl.querySelector('.lang-en').style.display = '';
-    }
+    statusEl.innerHTML = window.i18n[currentLang].reconnecting;
+    
     reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts) + Math.random() * 1000, 30000);
     setTimeout(startConnection, delay);
@@ -554,20 +675,14 @@ function checkGlobalStatus() {
   });
   if (connected) {
     if (statusEl) {
-      statusEl.innerHTML = `<span class="lang-id">WebRTC Terhubung (Live)</span><span class="lang-en" style="display:none;">WebRTC Connected (Live)</span>`;
-      if (currentLang === 'en') {
-        statusEl.querySelector('.lang-id').style.display = 'none';
-        statusEl.querySelector('.lang-en').style.display = '';
-      }
+      window.updateStatusBadge(true);
+      
     }
     startTelemetry();
   } else {
     if (statusEl) {
-      statusEl.innerHTML = `<span class="lang-id">Terautentikasi (Menunggu Viewer)</span><span class="lang-en" style="display:none;">Authenticated (Waiting for Viewer)</span>`;
-      if (currentLang === 'en') {
-        statusEl.querySelector('.lang-id').style.display = 'none';
-        statusEl.querySelector('.lang-en').style.display = '';
-      }
+      statusEl.innerHTML = window.i18n[currentLang].authWait;
+      
     }
     stopTelemetry();
   }

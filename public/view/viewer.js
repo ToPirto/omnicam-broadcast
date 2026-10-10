@@ -10,7 +10,14 @@ if (!camId) {
 
 const video = document.getElementById('video');
 const isOBS = urlParams.get('obs') === '1';
-video.muted = !isOBS;
+
+if (isOBS) {
+  video.muted = false;
+  video.volume = 1.0;
+} else {
+  video.muted = true;
+}
+
 video.autoplay = true;
 video.playsInline = true;
 
