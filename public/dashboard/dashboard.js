@@ -1,10 +1,19 @@
 import { createEnvelope } from '../shared/protocol.js';
 
-document.getElementById('server-url').innerText = `https://${window.location.host}`;
+document.getElementById('server-url').innerText = window.location.hostname;
+document.getElementById('obs-port').innerText = parseInt(window.location.port || 443) + 1;
 
 const grid = document.getElementById('cam-grid');
 const btnAdd = document.getElementById('btn-add');
 const qrContainer = document.getElementById('qr-container');
+
+const obsModal = document.getElementById('obs-modal');
+document.getElementById('btn-obs-reconnect').onclick = () => {
+  obsModal.style.display = 'flex';
+};
+document.getElementById('btn-close-modal').onclick = () => {
+  obsModal.style.display = 'none';
+};
 
 // Connection Banner
 const banner = document.createElement('div');
@@ -13,9 +22,16 @@ banner.innerText = "Dashboard terputus, menyambung ulang...";
 document.body.appendChild(banner);
 
 function updateObsStatus(connected) {
-  const statusEl = document.getElementById('obs-status');
-  if (statusEl) {
-    statusEl.innerHTML = connected ? ' - <span style="color:#0f0;">OBS Terhubung</span>' : ' - <span style="color:#f00;">OBS Tidak Terhubung (Buka OBS dan aktifkan WebSocket Server)</span>';
+  const badge = document.getElementById('obs-badge');
+  const text = document.getElementById('obs-status-text');
+  if (badge && text) {
+    if (connected) {
+      badge.className = 'obs-badge connected';
+      text.innerText = '[ OBS TERHUBUNG ]';
+    } else {
+      badge.className = 'obs-badge disconnected';
+      text.innerText = '[ OBS TERPUTUS ]';
+    }
   }
 }
 
@@ -39,7 +55,15 @@ document.getElementById('btn-save-settings').onclick = async () => {
     body: JSON.stringify({ obsWsUrl, obsWsPassword })
   });
   btn.innerText = 'Disimpan!';
-  setTimeout(() => { btn.innerText = 'Simpan & Reconnect OBS'; btn.disabled = false; }, 2000);
+  setTimeout(() => { 
+    btn.innerText = 'Simpan'; 
+    btn.disabled = false; 
+    obsModal.style.display = 'none';
+  }, 1000);
+};
+
+document.getElementById('btn-refresh').onclick = () => {
+  loadCamerasSnapshot();
 };
 
 loadSettings();
@@ -48,6 +72,21 @@ let ws;
 const cameras = new Map(); // camId -> card Element
 const webrtcs = new Map(); // camId -> RTCPeerConnection
 let reconnectAttempts = 0;
+
+function updateSummaryCounters() {
+  let program = 0;
+  let preview = 0;
+  let total = cameras.size;
+  
+  cameras.forEach((card, id) => {
+    if (card.classList.contains('program')) program++;
+    else if (card.classList.contains('preview')) preview++;
+  });
+  
+  document.getElementById('count-total').innerText = total;
+  document.getElementById('count-program').innerText = program;
+  document.getElementById('count-preview').innerText = preview;
+}
 
 function connect() {
   ws = new WebSocket(`wss://${window.location.host}`);
@@ -62,7 +101,6 @@ function connect() {
   
   ws.onmessage = async (e) => {
     const msg = JSON.parse(e.data);
-    // Task 4: removed per-message "WS msg type" console.log
     if (msg.type === 'obs_status') {
       updateObsStatus(msg.payload.connected);
     } else if (msg.type === 'cam_join') {
@@ -102,8 +140,8 @@ function connect() {
 }
 
 async function handleWebRTCOffer(msg) {
-  const camId = msg.from; // Offer comes from camera
-  const viewerId = msg.to; // This specific dashboard viewer ID
+  const camId = msg.from; 
+  const viewerId = msg.to; 
   let pcInfo = webrtcs.get(camId);
   
   if (pcInfo && pcInfo.pc) pcInfo.pc.close();
@@ -118,10 +156,7 @@ async function handleWebRTCOffer(msg) {
   
   pc.ontrack = (event) => {
     if (!videoEl) return;
-    // Idempotent: set srcObject exactly once per peer connection
     if (!srcObjectSet) {
-      // Sender uses addTransceiver (sendonly) which does not associate
-      // tracks with a stream, so event.streams is empty. Build our own.
       if (event.streams && event.streams[0]) {
         videoEl.srcObject = event.streams[0];
       } else {
@@ -129,13 +164,11 @@ async function handleWebRTCOffer(msg) {
         videoEl.srcObject = inboundStream;
       }
       srcObjectSet = true;
-      // Ignore AbortError from play(); no retry loop
       videoEl.play().catch(() => {});
       const placeholder = document.getElementById(`preview-placeholder-${camId}`);
       if (placeholder) placeholder.style.display = 'none';
       videoEl.style.display = 'block';
     } else if (!event.streams || !event.streams[0]) {
-      // Additional tracks (audio) on same connection - add to existing stream
       inboundStream.addTrack(event.track);
     }
   };
@@ -169,62 +202,71 @@ async function loadCamerasSnapshot() {
     const res = await fetch('/api/cameras');
     const list = await res.json();
     
-    // Mark all existing as potentially stale
     const currentIds = new Set(cameras.keys());
-    
     for (const cam of list) {
       currentIds.delete(cam.id);
       await patchCamera(cam.id, cam);
     }
-    
-    // Remove cameras not in snapshot
     for (const staleId of currentIds) {
       removeCamera(staleId);
     }
-  } catch (err) {
-    console.error('Snapshot error:', err);
-  }
+  } catch (err) {}
 }
 
 async function patchCamera(id, data) {
   if (!cameras.has(id)) {
-    // Create new card
     const div = document.createElement('div');
-    div.className = 'card cam-card';
+    div.className = 'card cam-card offline';
     div.id = `cam-card-${id}`;
     
+    const obsUrl = `http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1`;
+
     div.innerHTML = `
-      <h3 style="display: flex; justify-content: space-between; align-items: center;">
-        <span id="name-${id}"></span>
-        <button id="btn-rename-${id}" style="background: transparent; border: 1px solid #555; border-radius: 3px; color: #fff; font-size: 0.8em; cursor: pointer; padding: 2px 5px;" title="Ubah Nama">Ubah</button>
-      </h3>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <p style="margin:0;">Terhubung <span id="tally-${id}" style="float: right; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; background: #555; color: #fff;">OFF</span></p>
-        <label style="font-size: 0.8em; cursor: pointer; color: #aaa;"><input type="checkbox" id="chk-preview-${id}"> Preview</label>
+        <div style="font-weight: bold; font-size: 18px;" id="name-${id}"></div>
+        <button id="btn-rename-${id}" class="btn" style="padding: 4px 8px; font-size: 10px;">[ UBAH ]</button>
       </div>
       
-      <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; margin-bottom: 10px; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center; display: none;">
+      <div id="preview-container-${id}" style="position: relative; width: 100%; height: 180px; background: #000; border-radius: 4px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; display: none;">
          <div id="preview-placeholder-${id}" style="color: #888;">Menunggu video...</div>
          <video id="preview-vid-${id}" muted autoplay playsinline style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
       </div>
-
-      <div id="audio-meter-${id}" class="led-meter-container">
-        <span class="led-text" id="audio-text-${id}">MIC</span>
+      
+      <div id="audio-meter-${id}" class="led-meter-container" style="display: none;">
         ${Array(16).fill(0).map((_, i) => `<div class="led-segment" id="audio-seg-${id}-${i}"></div>`).join('')}
       </div>
-      <div id="telemetry-${id}" style="color: #aaa; font-size: 0.9em; margin-bottom: 10px; font-family: monospace;">
-        Menunggu data...
+      
+      <div class="telemetry-row">
+        <div class="telemetry-chip" id="tel-res-${id}">[ -- ]</div>
+        <div class="telemetry-chip" id="tel-bit-${id}">[ 0.0 Mbps ]</div>
+        <div class="telemetry-chip" id="tel-loss-${id}">[ LOSS: 0 ]</div>
+        <div class="telemetry-chip">
+          <div class="battery-container">
+            <div class="battery-body"><div id="bat-lvl-${id}" class="battery-level"></div></div>
+            <div class="battery-nipple"></div>
+            <div id="bat-txt-${id}" style="margin-left: 4px;">--%</div>
+          </div>
+        </div>
       </div>
-      <a href="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1" target="_blank" style="color: #4da6ff;">Buka di Tab Baru (Untuk OBS)</a>
-      <br><br>
-      <input type="text" value="http://127.0.0.1:${parseInt(window.location.port || 443) + 1}/view/index.html?camId=${id}&obs=1" readonly onclick="this.select(); document.execCommand('copy'); alert('Disalin!')" style="width: 100%; padding: 5px; margin-bottom: 10px; border-radius: 3px; border: 1px solid #555; background: #333; color: #fff; box-sizing: border-box;" title="URL OBS (Klik untuk copy)">
-      <button class="btn-add-obs" id="btn-obs-${id}" style="background: #28a745; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; margin-bottom: 10px; width: 100%;">+ Tambah Otomatis ke OBS</button>
-      <button id="btn-disconnect-${id}" style="background: #dc3545; color: white; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px;">Putuskan</button>
-      <button id="btn-delete-${id}" style="background: #dc3545; color: white; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 10px; display: none;">Hapus</button>
-      <div style="font-size: 0.8em; color: #666;">ID: ${id}</div>
+      
+      <div class="copy-url-box">
+        <input type="text" id="obs-url-${id}" value="${obsUrl}" readonly>
+        <button class="btn" id="btn-copy-${id}">[ SALIN / COPY ]</button>
+      </div>
+      
+      <div style="display: flex; gap: 10px; margin-top: 15px;">
+        <button class="btn btn-green" id="btn-obs-${id}" style="flex: 1;">[ + Tambah Otomatis ke OBS ]</button>
+      </div>
+      
+      <div style="display: flex; gap: 10px; margin-top: 10px;">
+        <label style="flex: 1; display: flex; align-items: center; justify-content: center; background: #2a2a32; border-radius: 4px; font-size: 12px; cursor: pointer;">
+          <input type="checkbox" id="chk-preview-${id}" style="margin-right: 5px;"> Preview
+        </label>
+        <button class="btn btn-red" id="btn-disconnect-${id}" style="flex: 1; display: none;">[ Putuskan ]</button>
+        <button class="btn btn-red" id="btn-delete-${id}" style="flex: 1; display: none;">[ Hapus ]</button>
+      </div>
     `;
     
-    // Add to DOM BEFORE grid.firstChild (which is the add card or other cameras)
     grid.insertBefore(div, grid.firstChild);
     cameras.set(id, div);
     
@@ -240,10 +282,19 @@ async function patchCamera(id, data) {
         document.getElementById(`name-${id}`).textContent = newName;
       }
     };
+    
+    document.getElementById(`btn-copy-${id}`).onclick = () => {
+      const input = document.getElementById(`obs-url-${id}`);
+      input.select();
+      document.execCommand('copy');
+      const btn = document.getElementById(`btn-copy-${id}`);
+      btn.innerText = '[ DISALIN ]';
+      setTimeout(() => btn.innerText = '[ SALIN / COPY ]', 2000);
+    };
 
     document.getElementById(`btn-obs-${id}`).onclick = async (e) => {
       e.target.disabled = true;
-      e.target.textContent = 'Menambahkan...';
+      e.target.textContent = '[ Menambahkan... ]';
       const res = await fetch('/api/obs/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -251,35 +302,29 @@ async function patchCamera(id, data) {
       });
       const resData = await res.json();
       if (resData.success) {
-        e.target.textContent = resData.exists ? 'Berhasil Diperbarui di OBS' : 'Berhasil Ditambahkan';
+        e.target.textContent = resData.exists ? '[ Diperbarui di OBS ]' : '[ Berhasil Ditambahkan ]';
       } else {
         alert('Gagal: ' + resData.error);
-        e.target.textContent = '+ Tambah Otomatis ke OBS';
+        e.target.textContent = '[ + Tambah Otomatis ke OBS ]';
         e.target.disabled = false;
       }
     };
 
     document.getElementById(`btn-delete-${id}`).onclick = async () => {
-      console.log('Delete button clicked for id:', id);
+      console.log('Delete button clicked for', id);
       if (confirm('Hapus kamera ini?')) {
-        console.log('Confirmed delete');
         try {
           const res = await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
-          console.log('Delete API response status:', res.status);
+          console.log('Delete res status:', res.status);
           if (res.ok) {
-            console.log('Remove camera from DOM');
             removeCamera(id);
           } else {
-            const body = await res.text();
-            console.error('Failed to delete:', body);
             alert('Gagal menghapus kamera');
           }
         } catch (e) {
-          console.error('Delete fetch exception:', e);
+          console.error('Delete error', e);
           alert('Gagal menghapus kamera');
         }
-      } else {
-        console.log('Delete cancelled');
       }
     };
 
@@ -301,15 +346,16 @@ async function patchCamera(id, data) {
           ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId: id })));
         }
         document.getElementById(`preview-container-${id}`).style.display = 'flex';
+        document.getElementById(`audio-meter-${id}`).style.display = 'flex';
         isPreviewing = true;
       } else if (!enable && isPreviewing) {
         document.getElementById(`preview-container-${id}`).style.display = 'none';
+        document.getElementById(`audio-meter-${id}`).style.display = 'none';
         if (viewerId) {
           if (webrtcs.has(id)) {
             webrtcs.get(id).pc.close();
             webrtcs.delete(id);
           }
-          // Optional: we can send viewer_disconnect so sender cleans up immediately
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(createEnvelope('viewer_disconnect', viewerId, id)));
           }
@@ -338,7 +384,6 @@ async function patchCamera(id, data) {
         }
       }
     });
-
   }
 
   updateCameraUI(id, data);
@@ -349,25 +394,16 @@ function updateCameraUI(id, data) {
   if (!card) return;
 
   if (data.name !== undefined) {
-    document.getElementById(`name-${id}`).textContent = data.name || `Kamera ${id.substring(0, 4)}`;
+    document.getElementById(`name-${id}`).textContent = data.name || `CAM ${id.substring(0, 4)}`;
   }
   
   if (data.tally !== undefined) {
-    const el = document.getElementById(`tally-${id}`);
-    if (el) {
-       if (data.tally === 2) {
-         el.textContent = 'PROGRAM';
-         el.style.background = '#ff3b30';
-         el.style.color = '#fff';
-       } else if (data.tally === 1) {
-         el.textContent = 'PREVIEW';
-         el.style.background = '#34c759';
-         el.style.color = '#000';
-       } else {
-         el.textContent = 'STANDBY';
-         el.style.background = '#8e8e93';
-         el.style.color = '#fff';
-       }
+    card.classList.remove('program', 'preview', 'offline');
+    if (data.status === 'offline') {
+      card.classList.add('offline');
+    } else {
+      if (data.tally === 2) card.classList.add('program');
+      else if (data.tally === 1) card.classList.add('preview');
     }
   }
 
@@ -376,13 +412,16 @@ function updateCameraUI(id, data) {
     const videoEl = document.getElementById(`preview-vid-${id}`);
     const btnDelete = document.getElementById(`btn-delete-${id}`);
     const btnDisconnect = document.getElementById(`btn-disconnect-${id}`);
+    
     if (data.status === 'offline') {
+      card.classList.add('offline');
+      card.classList.remove('program', 'preview');
       if (btnDelete) btnDelete.style.display = 'block';
       if (btnDisconnect) btnDisconnect.style.display = 'none';
       if (placeholder) {
         placeholder.style.display = 'block';
         placeholder.textContent = 'Kamera terputus';
-        placeholder.style.color = '#d9534f';
+        placeholder.style.color = '#ff3b30';
       }
       if (videoEl) videoEl.style.display = 'none';
       
@@ -392,6 +431,7 @@ function updateCameraUI(id, data) {
         webrtcs.delete(id);
       }
     } else if (data.status === 'online') {
+      card.classList.remove('offline');
       if (btnDelete) btnDelete.style.display = 'none';
       if (btnDisconnect) btnDisconnect.style.display = 'block';
       if (placeholder) {
@@ -401,10 +441,9 @@ function updateCameraUI(id, data) {
       }
       if (videoEl) videoEl.style.display = 'none';
       
-      // Request WebRTC connection again if it was offline
       if (!webrtcs.has(id)) {
         const viewerId = 'dash-' + Math.random().toString(36).substring(2, 10);
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === WebSocket.OPEN && document.getElementById(`chk-preview-${id}`).checked) {
           ws.send(JSON.stringify(createEnvelope('cam_join', viewerId, 'server', { camId: id })));
         }
       }
@@ -412,36 +451,43 @@ function updateCameraUI(id, data) {
   }
 
   if (data.lastTelemetry) {
-    const el = document.getElementById(`telemetry-${id}`);
-    if (el) {
-      const bat = data.lastTelemetry.battery ? Math.round(data.lastTelemetry.battery * 100) + '%' : 'N/A';
-      const bit = data.lastTelemetry.bitrate ? (data.lastTelemetry.bitrate / 1000000).toFixed(1) : '0.0';
-      const fps = data.lastTelemetry.fps || 0;
-      el.textContent = `BAT: ${bat} | 1080p${fps} | ${bit} Mbps | LOSS: 0`;
-
-      const isMuted = data.lastTelemetry.isMuted;
-      const audioLvl = data.lastTelemetry.audioLevel || 0;
-      const barCount = Math.round((audioLvl / 100) * 16);
-      
-      const audioText = document.getElementById(`audio-text-${id}`);
-      if (audioText) {
-        audioText.textContent = isMuted ? '[MUTE]' : 'MIC';
-        audioText.style.color = isMuted ? '#8e8e93' : '#fff';
+    const batPercent = data.lastTelemetry.battery ? Math.round(data.lastTelemetry.battery * 100) : null;
+    if (batPercent !== null) {
+      const batLvl = document.getElementById(`bat-lvl-${id}`);
+      if (batLvl) {
+        batLvl.style.width = batPercent + '%';
+        if (batPercent > 40) batLvl.style.backgroundColor = '#34c759';
+        else if (batPercent > 20) batLvl.style.backgroundColor = '#ffd600';
+        else batLvl.style.backgroundColor = '#ff3b30';
       }
-      
-      for (let i = 0; i < 16; i++) {
-        const seg = document.getElementById(`audio-seg-${id}-${i}`);
-        if (seg) {
-          seg.className = 'led-segment';
-          if (!isMuted && i < barCount) {
-            if (i < 10) seg.classList.add('active-green');
-            else if (i < 14) seg.classList.add('active-yellow');
-            else seg.classList.add('active-red');
-          }
+      const batTxt = document.getElementById(`bat-txt-${id}`);
+      if (batTxt) batTxt.innerText = batPercent + '%';
+    }
+
+    const bit = data.lastTelemetry.bitrate ? (data.lastTelemetry.bitrate / 1000000).toFixed(1) : '0.0';
+    const fps = data.lastTelemetry.fps || 0;
+    
+    document.getElementById(`tel-res-${id}`).innerText = `[ 1080p${fps} ]`;
+    document.getElementById(`tel-bit-${id}`).innerText = `[ ${bit} Mbps ]`;
+
+    const isMuted = data.lastTelemetry.isMuted;
+    const audioLvl = data.lastTelemetry.audioLevel || 0;
+    const barCount = Math.round((audioLvl / 100) * 16);
+    
+    for (let i = 0; i < 16; i++) {
+      const seg = document.getElementById(`audio-seg-${id}-${i}`);
+      if (seg) {
+        seg.className = 'led-segment';
+        if (!isMuted && i < barCount) {
+          if (i < 10) seg.classList.add('active-green');
+          else if (i < 14) seg.classList.add('active-yellow');
+          else seg.classList.add('active-red');
         }
       }
     }
   }
+  
+  updateSummaryCounters();
 }
 
 function removeCamera(id) {
@@ -455,18 +501,16 @@ function removeCamera(id) {
     pcInfo.pc.close();
     webrtcs.delete(id);
   }
+  updateSummaryCounters();
 }
 
-// Pause/resume preview based on visibility
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-     // pause videos
      webrtcs.forEach((pcInfo, camId) => {
        const videoEl = document.getElementById(`preview-vid-${camId}`);
        if (videoEl) videoEl.pause();
      });
   } else {
-     // resume videos
      webrtcs.forEach((pcInfo, camId) => {
        const videoEl = document.getElementById(`preview-vid-${camId}`);
        if (videoEl && videoEl.srcObject) videoEl.play().catch(()=>{});
@@ -483,18 +527,15 @@ btnAdd.onclick = async () => {
     qrContainer.innerHTML = '';
     const img = document.createElement('img');
     img.src = data.qr;
-    const a = document.createElement('a');
-    a.href = data.url;
-    a.target = '_blank';
-    a.style = "color: #4da6ff; word-break: break-all;";
-    a.textContent = data.url;
+    const a = document.createElement('div');
+    a.className = 'qr-url';
+    a.innerText = data.url;
     qrContainer.appendChild(img);
-    qrContainer.appendChild(document.createElement('br'));
     qrContainer.appendChild(a);
   } catch (err) {
     alert('Gagal membuat QR');
   }
-  btnAdd.innerText = 'Buat QR Baru';
+  btnAdd.innerText = 'Buat QR Code Baru';
   btnAdd.disabled = false;
 };
 

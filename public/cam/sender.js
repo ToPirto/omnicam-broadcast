@@ -198,6 +198,23 @@ if (!isNode) {
     }
   };
 
+  
+  // Audio Filter Chips
+  ['echo', 'noise', 'agc'].forEach(f => {
+    const btn = document.getElementById('btn-chk-' + f);
+    const chk = document.getElementById('chk-' + f);
+    if (btn && chk) {
+      btn.onclick = () => {
+        chk.checked = !chk.checked;
+        if (chk.checked) btn.classList.add('active');
+        else btn.classList.remove('active');
+        if (localStream) {
+          startCamera(currentDeviceId);
+        }
+      };
+    }
+  });
+
   currentLang = localStorage.getItem('omnicam_lang') || 'id';
 
   function updateLanguage() {
@@ -219,7 +236,8 @@ if (!isNode) {
       menuItems[3].childNodes[1].textContent = t.resolution;
     }
 
-    if (btnLangToggle) btnLangToggle.innerText = currentLang.toUpperCase();
+    if (btnGridToggle) btnGridToggle.innerText = isGridOn ? '[ ON ]' : '[ OFF ]';
+    if (btnLangToggle) btnLangToggle.innerText = currentLang === 'id' ? '[ ID | en ]' : '[ id | EN ]';
     if (btnFullscreen) btnFullscreen.innerText = t.fullscreen;
     
     if (btnDisconnect && !intentionalDisconnect) btnDisconnect.innerText = t.disconnect;
@@ -277,7 +295,7 @@ if (!isNode) {
   if (btnGridToggle && gridOverlay) {
     btnGridToggle.onclick = () => {
       isGridOn = !isGridOn;
-      btnGridToggle.innerText = isGridOn ? 'ON' : 'OFF';
+      btnGridToggle.innerText = isGridOn ? '[ ON ]' : '[ OFF ]';
       gridOverlay.style.display = isGridOn ? 'block' : 'none';
     };
   }

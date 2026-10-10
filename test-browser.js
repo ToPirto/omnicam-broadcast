@@ -119,8 +119,8 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     console.log('Waiting for camera card on dashboard...');
     await dashboard.bringToFront();
     await dashboard.waitForSelector('.cam-card', { timeout: 10000 });
-    const camIdText = await dashboard.$eval('.cam-card div[style*="font-size: 0.8em"]', (el) => el.innerText);
-    const globalCamId = camIdText.replace('ID: ', '').trim();
+    const camCardId = await dashboard.$eval('.cam-card[id^="cam-card-"]', (el) => el.id);
+    const globalCamId = camCardId.replace('cam-card-', '').trim();
     console.log('Camera ID:', globalCamId);
 
     // -- 6. Wait for telemetry >= 10 s on dashboard -------------------
@@ -131,7 +131,7 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     // First, wait until telemetry UI shows 1080p data at all
     await dashboard.waitForFunction(
       (id) => {
-        const el = document.getElementById(`telemetry-${id}`);
+        const el = document.getElementById(`tel-res-${id}`);
         return el && el.innerText.includes('1080p');
       },
       { timeout: 20000 },
@@ -144,10 +144,11 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
 
     // Verify telemetry is still updating (Mbps > 0)
-    const telemetryText = await dashboard.$eval(`#telemetry-${globalCamId}`, (el) => el.innerText);
-    console.log('Telemetry after >=10 s:', telemetryText);
-    assert(telemetryText.includes('Mbps'), 'Telemetry must contain Mbps');
-    assert(telemetryText.includes('1080p'), 'Telemetry must contain 1080p');
+    const telResText = await dashboard.$eval(`#tel-res-${globalCamId}`, (el) => el.innerText);
+    const telBitText = await dashboard.$eval(`#tel-bit-${globalCamId}`, (el) => el.innerText);
+    console.log('Telemetry after >=10 s:', telResText, telBitText);
+    assert(telBitText.includes('Mbps'), 'Telemetry must contain Mbps');
+    assert(telResText.includes('1080p'), 'Telemetry must contain 1080p');
 
     // -- 7. Assert dashboard preview: srcObject, videoWidth, currentTime --
     console.log('Asserting dashboard preview video...');
@@ -415,6 +416,10 @@ const BASE = `https://${LAN_IP}:${PORT}`;
       await dialog.accept();
     });
 
+    await dashboard.evaluate(() => {
+      window.alert = (msg) => console.log('ALERT:', msg);
+    });
+
     await dashboard.$eval(`#btn-delete-${globalCamId}`, btn => {
       btn.click();
     });
@@ -441,6 +446,10 @@ const BASE = `https://${LAN_IP}:${PORT}`;
     exitCode = 0;
   } catch (err) {
     console.error('\n[FAIL] E2E Test Failed:', err.message);
+    try {
+      const html = await dashboard.evaluate(() => document.body.innerHTML);
+      console.log('DASHBOARD HTML DUMP:\n', html.substring(0, 3000));
+    } catch (e) {}
     exitCode = 1;
   } finally {
     await browser.close();

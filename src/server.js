@@ -51,6 +51,10 @@ async function start() {
   obsBridge.connect();
 
   fastify.get('/', async (request, reply) => {
+    const userAgent = request.headers['user-agent'] || '';
+    if (/Mobile|Android|iP(hone|od|ad)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(userAgent)) {
+      return reply.redirect('/cam/');
+    }
     return reply.sendFile('dashboard/index.html');
   });
 
